@@ -41,46 +41,46 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDx8Nrd3UGsRfSassEZNx_OoyaAfZ0HTW0',
-    appId: '1:330928960235:web:92d996c1bca6ffdb3104ae',
-    messagingSenderId: '330928960235',
-    projectId: 'mobile-final-3',
-    authDomain: 'mobile-final-3.firebaseapp.com',
-    storageBucket: 'mobile-final-3.firebasestorage.app',
+    apiKey: 'AIzaSyBW0S1jaoe_AvFoiaeWh-v0se3gnfT7QXg',
+    appId: '1:907297866335:web:3980266a0d4dbbf715d1ea',
+    messagingSenderId: '907297866335',
+    projectId: 'hwnoteapp',
+    authDomain: 'hwnoteapp.firebaseapp.com',
+    storageBucket: 'hwnoteapp.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyByHtOKU_EIDpJZ7gSenWF43nvz9j3YwMk',
-    appId: '1:330928960235:android:1cdf74ac6324e2bb3104ae',
-    messagingSenderId: '330928960235',
-    projectId: 'mobile-final-3',
-    storageBucket: 'mobile-final-3.firebasestorage.app',
+    apiKey: 'AIzaSyC1myqrM6cCHGZGNqxVIaj9W3OtJWYK-fM',
+    appId: '1:907297866335:android:5fe8ae07e6ae864e15d1ea',
+    messagingSenderId: '907297866335',
+    projectId: 'hwnoteapp',
+    storageBucket: 'hwnoteapp.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCO52JXUZbvOlF4MAfTZjt5OQNP-CGdNTk',
-    appId: '1:330928960235:ios:c027e3cde93720bb3104ae',
-    messagingSenderId: '330928960235',
-    projectId: 'mobile-final-3',
-    storageBucket: 'mobile-final-3.firebasestorage.app',
+    apiKey: 'AIzaSyDEmUks_jyoN5GXWSyJpkvSUXsLXui4dp8',
+    appId: '1:907297866335:ios:aab7278ce7a6cea515d1ea',
+    messagingSenderId: '907297866335',
+    projectId: 'hwnoteapp',
+    storageBucket: 'hwnoteapp.firebasestorage.app',
     iosBundleId: 'com.example.todoapp',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCO52JXUZbvOlF4MAfTZjt5OQNP-CGdNTk',
-    appId: '1:330928960235:ios:c027e3cde93720bb3104ae',
-    messagingSenderId: '330928960235',
-    projectId: 'mobile-final-3',
-    storageBucket: 'mobile-final-3.firebasestorage.app',
+    apiKey: 'AIzaSyDEmUks_jyoN5GXWSyJpkvSUXsLXui4dp8',
+    appId: '1:907297866335:ios:aab7278ce7a6cea515d1ea',
+    messagingSenderId: '907297866335',
+    projectId: 'hwnoteapp',
+    storageBucket: 'hwnoteapp.firebasestorage.app',
     iosBundleId: 'com.example.todoapp',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDx8Nrd3UGsRfSassEZNx_OoyaAfZ0HTW0',
-    appId: '1:330928960235:web:eb602c90ad1782ec3104ae',
-    messagingSenderId: '330928960235',
-    projectId: 'mobile-final-3',
-    authDomain: 'mobile-final-3.firebaseapp.com',
-    storageBucket: 'mobile-final-3.firebasestorage.app',
+    apiKey: 'AIzaSyBW0S1jaoe_AvFoiaeWh-v0se3gnfT7QXg',
+    appId: '1:907297866335:web:df764f38db6ca21d15d1ea',
+    messagingSenderId: '907297866335',
+    projectId: 'hwnoteapp',
+    authDomain: 'hwnoteapp.firebaseapp.com',
+    storageBucket: 'hwnoteapp.firebasestorage.app',
   );
 }
