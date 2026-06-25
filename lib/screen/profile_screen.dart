@@ -1,0 +1,105 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:provider/provider.dart';
+import 'package:todoapp/helper/database.dart';
+import 'package:todoapp/class/note.dart';
+import 'package:todoapp/provider/tag_provider.dart';
+
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final user = FirebaseAuth.instance.currentUser;
+    final photo = user?.photoURL;
+    final name = user?.displayName ?? 'User';
+    final email = user?.email ?? '';
+    final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    final Database? db = args != null ? args['db'] as Database? : null;
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: theme.colorScheme.primary,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Profile', style: TextStyle(color: Colors.white)),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Center(
+              child: CircleAvatar(
+                radius: 48,
+                backgroundImage: (photo != null && photo.isNotEmpty) ? NetworkImage(photo) : null,
+                child: (photo == null || photo.isEmpty)
+                    ? Text(
+                        (name.isNotEmpty ? name[0] : '?'),
+                        style: const TextStyle(fontSize: 32, color: Colors.white),
+                      )
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(name, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+            if (email.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(email, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+            ],
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: db == null
+                    ? null
+                    : () {
+                        Navigator.pushNamed(context, '/tags', arguments: {'db': db});
+                      },
+                child: const Text('Manage tags'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/performance-test');
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                ),
+                child: const Text('Performance Test'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  // Clear providers before logout
+                  Provider.of<NoteProvider>(context, listen: false).clearNotes();
+                  Provider.of<TagProvider>(context, listen: false).setTags([]);
+                  
+                  // Clear database cache (will reload when new user logs in)
+                  await DatabaseHelper.clearCache();
+                  
+                  // Sign out
+                  try { await GoogleSignIn().signOut(); } catch (_) {}
+                  await FirebaseAuth.instance.signOut();
+                  if (!context.mounted) return;
+                  Navigator.pushReplacementNamed(context, '/login');
+                },
+                child: const Text('Sign out'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
