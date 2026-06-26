@@ -13,6 +13,11 @@ class NoteCard extends StatefulWidget {
     required this.delete,
     this.onTogglePin,
     this.onManageLabels,
+    this.onShare,
+    this.onSetReminder,
+    this.onMoveToFolder,
+    this.onToggleFavorite,
+    this.onChangeColor,
   });
 
   final Note note;
@@ -20,6 +25,11 @@ class NoteCard extends StatefulWidget {
   final Future<void> Function(int id) delete;
   final Future<void> Function(bool pinned)? onTogglePin;
   final Future<void> Function(Note note)? onManageLabels;
+  final Future<void> Function(Note note)? onShare;
+  final Future<void> Function(Note note)? onSetReminder;
+  final Future<void> Function(Note note)? onMoveToFolder;
+  final Future<void> Function(Note note)? onToggleFavorite;
+  final Future<void> Function(Note note)? onChangeColor;
 
   @override
   State<NoteCard> createState() => _NoteCardState();
@@ -39,8 +49,17 @@ class _NoteCardState extends State<NoteCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cardColor = widget.note.color != 0
+        ? Color(widget.note.color)
+        : theme.colorScheme.surfaceVariant;
+    final textColor = widget.note.color != 0
+        ? (ThemeData.estimateBrightnessForColor(Color(widget.note.color)) == Brightness.dark
+            ? Colors.white
+            : Colors.black87)
+        : theme.textTheme.bodyMedium?.color;
+
     return Card(
-      color: theme.colorScheme.surfaceVariant,
+      color: cardColor,
       elevation: 3,
       margin: const EdgeInsets.symmetric(horizontal: 0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -49,10 +68,44 @@ class _NoteCardState extends State<NoteCard> {
         child: ListTile(
           contentPadding: EdgeInsets.zero,
           title: (widget.note.title == null || widget.note.title!.isEmpty)
-              ? null
-              : Text(
-                  widget.note.title ?? '',
-                  style: theme.textTheme.titleLarge!.copyWith(fontWeight: FontWeight.bold, fontSize: 15),
+              ? (widget.note.reminderAt != null || widget.note.isFavorite
+                  ? Row(children: [
+                      if (widget.note.isFavorite)
+                        const Icon(Icons.star, size: 16, color: Colors.amber),
+                      if (widget.note.reminderAt != null) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.alarm, size: 16, color: theme.colorScheme.primary),
+                        const SizedBox(width: 6),
+                        Text(_formatReminder(widget.note.reminderAt!),
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+                      ]
+                    ])
+                  : null)
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.note.title ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge!.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                    if (widget.note.isFavorite)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 6),
+                        child: Icon(Icons.star, size: 18, color: Colors.amber),
+                      ),
+                    if (widget.note.reminderAt != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Icon(Icons.alarm, size: 16, color: theme.colorScheme.primary),
+                      ),
+                  ],
                 ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,7 +119,7 @@ class _NoteCardState extends State<NoteCard> {
                     _plainPreview(widget.note.content!),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: textColor),
                   ),
                 ),
               ..._buildTagWidgets(context),
@@ -77,14 +130,14 @@ class _NoteCardState extends State<NoteCard> {
                   style: theme.textTheme.bodySmall!.copyWith(
                       fontStyle: FontStyle.italic,
                       fontWeight: FontWeight.w500,
-                      color: theme.colorScheme.outline),
+                      color: widget.note.color != 0 ? textColor?.withOpacity(0.7) : theme.colorScheme.outline),
                 ),
               ),
             ],
           ),
           onTap: () async => await _onTap(widget.note),
           trailing: PopupMenuButton<String>(
-            icon: Icon(PhosphorIconsDuotone.dotsThreeVertical, color: theme.colorScheme.primary),
+            icon: Icon(PhosphorIconsDuotone.dotsThreeVertical, color: widget.note.color != 0 ? textColor : theme.colorScheme.primary),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             onSelected: (value) async {
               switch (value) {
@@ -96,6 +149,21 @@ class _NoteCardState extends State<NoteCard> {
                   break;
                 case 'labels':
                   if (widget.onManageLabels != null) await widget.onManageLabels!(widget.note);
+                  break;
+                case 'reminder':
+                  if (widget.onSetReminder != null) await widget.onSetReminder!(widget.note);
+                  break;
+                case 'favorite':
+                  if (widget.onToggleFavorite != null) await widget.onToggleFavorite!(widget.note);
+                  break;
+                case 'folder':
+                  if (widget.onMoveToFolder != null) await widget.onMoveToFolder!(widget.note);
+                  break;
+                case 'color':
+                  if (widget.onChangeColor != null) await widget.onChangeColor!(widget.note);
+                  break;
+                case 'share':
+                  if (widget.onShare != null) await widget.onShare!(widget.note);
                   break;
                 case 'delete':
                   await _delete(widget.note.id);
@@ -112,8 +180,8 @@ class _NoteCardState extends State<NoteCard> {
                     value: 'pin',
                     child: Row(children: [
                       Icon(PhosphorIconsDuotone.pushPin),
-                      SizedBox(width: 8),
-                      Text('Pin', style: itemTextStyle),
+                      const SizedBox(width: 8),
+                      Text('Ghim', style: itemTextStyle),
                     ]),
                   )
                 else
@@ -121,8 +189,8 @@ class _NoteCardState extends State<NoteCard> {
                     value: 'unpin',
                     child: Row(children: [
                       Icon(PhosphorIconsDuotone.pushPin),
-                      SizedBox(width: 8),
-                      Text('Unpin', style: itemTextStyle),
+                      const SizedBox(width: 8),
+                      Text('Bỏ Ghim', style: itemTextStyle),
                     ]),
                   ),
                 PopupMenuItem(
@@ -130,16 +198,61 @@ class _NoteCardState extends State<NoteCard> {
                   child: Row(children: [
                     const Icon(Icons.label_outline),
                     const SizedBox(width: 8),
-                    Text('Add label', style: itemTextStyle),
+                    Text('Thêm nhãn', style: itemTextStyle),
                   ]),
                 ),
+                if (widget.onSetReminder != null)
+                  PopupMenuItem(
+                    value: 'reminder',
+                    child: Row(children: [
+                      Icon(widget.note.reminderAt != null
+                          ? Icons.alarm_on
+                          : Icons.alarm_add),
+                      const SizedBox(width: 8),
+                      Text(widget.note.reminderAt != null ? 'Sửa nhắc nhở' : 'Đặt nhắc nhở',
+                          style: itemTextStyle),
+                    ]),
+                  ),
+                PopupMenuItem(
+                  value: 'favorite',
+                  child: Row(children: [
+                    Icon(widget.note.isFavorite ? Icons.star : Icons.star_border),
+                    const SizedBox(width: 8),
+                    Text(widget.note.isFavorite ? 'Bỏ yêu thích' : 'Yêu thích', style: itemTextStyle),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'folder',
+                  child: Row(children: [
+                    const Icon(Icons.folder_open_outlined),
+                    const SizedBox(width: 8),
+                    Text('Đưa vào thư mục', style: itemTextStyle),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'color',
+                  child: Row(children: [
+                    const Icon(Icons.color_lens_outlined),
+                    const SizedBox(width: 8),
+                    Text('Đổi màu sắc', style: itemTextStyle),
+                  ]),
+                ),
+                if (widget.onShare != null)
+                  PopupMenuItem(
+                    value: 'share',
+                    child: Row(children: [
+                      const Icon(Icons.share_outlined),
+                      const SizedBox(width: 8),
+                      Text('Chia sẻ', style: itemTextStyle),
+                    ]),
+                  ),
                 PopupMenuItem(
                   value: 'delete',
                   child: Row(
                     children: [
                       Icon(PhosphorIconsDuotone.trash, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Delete', style: itemTextStyle?.copyWith(color: Colors.red)),
+                      const SizedBox(width: 8),
+                      Text('Xóa', style: itemTextStyle?.copyWith(color: Colors.red)),
                     ],
                   ),
                 ),
@@ -258,4 +371,12 @@ String _formatDdMmYyyy(DateTime? dt) {
   final m = dt.month.toString().padLeft(2, '0');
   final y = dt.year.toString();
   return '$d/$m/$y';
+}
+
+String _formatReminder(DateTime dt) {
+  final d = dt.day.toString().padLeft(2, '0');
+  final m = dt.month.toString().padLeft(2, '0');
+  final hh = dt.hour.toString().padLeft(2, '0');
+  final mm = dt.minute.toString().padLeft(2, '0');
+  return '$d/$m $hh:$mm';
 }

@@ -32,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<List<ConnectivityResult>>? _connSub;
   bool _showFabMenu = false;
   int? _selectedTagId;
+  NoteSortMode _sortMode = NoteSortMode.editedDesc;
 
   @override
   void initState() {
@@ -336,7 +337,31 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          const SizedBox(width: 8),
+          PopupMenuButton<NoteSortMode>(
+            icon: const Icon(Icons.sort, color: Colors.white),
+            tooltip: 'Sort',
+            initialValue: _sortMode,
+            onSelected: (mode) => setState(() => _sortMode = mode),
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: NoteSortMode.editedDesc,
+                child: Text('Last edited (newest)'),
+              ),
+              PopupMenuItem(
+                value: NoteSortMode.editedAsc,
+                child: Text('Last edited (oldest)'),
+              ),
+              PopupMenuItem(
+                value: NoteSortMode.createdDesc,
+                child: Text('Date created (newest)'),
+              ),
+              PopupMenuItem(
+                value: NoteSortMode.titleAsc,
+                child: Text('Title (A–Z)'),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Padding(
@@ -349,6 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     db: _db!,
                     filterTagId: _selectedTagId,
                     tagFilterBar: _buildTagFilterBar(tags),
+                    sortMode: _sortMode,
                   ),
             Positioned(
               bottom: 36,

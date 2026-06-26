@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:todoapp/helper/database.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/provider/tag_provider.dart';
+import 'package:todoapp/provider/theme_provider.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -13,6 +14,7 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final themeProvider = context.watch<ThemeProvider>();
     final user = FirebaseAuth.instance.currentUser;
     final photo = user?.photoURL;
     final name = user?.displayName ?? 'User';
@@ -50,6 +52,34 @@ class ProfileScreen extends StatelessWidget {
               Text(email, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
             ],
             const SizedBox(height: 24),
+            Card(
+              child: SwitchListTile(
+                secondary: Icon(themeProvider.isDark
+                    ? Icons.dark_mode
+                    : Icons.light_mode),
+                title: const Text('Dark mode'),
+                value: themeProvider.isDark,
+                onChanged: (value) => themeProvider.toggleDark(value),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.bar_chart),
+                title: const Text('Statistics'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.pushNamed(context, '/statistics'),
+              ),
+            ),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Trash'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.pushNamed(context, '/trash'),
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(

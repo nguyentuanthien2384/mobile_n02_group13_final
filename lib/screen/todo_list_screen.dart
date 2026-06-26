@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:todoapp/sync/note_sync.dart';
 import 'package:todoapp/class/note.dart';
+import 'package:todoapp/screen/share_dialog.dart';
+import 'package:todoapp/screen/comments_sheet.dart';
 
 class TodoListScreen extends StatefulWidget {
   const TodoListScreen({super.key});
@@ -146,6 +148,34 @@ class _TodoListScreenState extends State<TodoListScreen> {
           backgroundColor: theme.colorScheme.primary,
           iconTheme: const IconThemeData(color: Colors.white),
           title: const Text('Checklist', style: TextStyle(color: Colors.white)),
+          actions: [
+            if (_remoteId != null) ...[
+              IconButton(
+                icon: const Icon(Icons.share_outlined, color: Colors.white),
+                tooltip: 'Chia sẻ',
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => ShareDialog(noteRemoteId: _remoteId!),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.comment_outlined, color: Colors.white),
+                tooltip: 'Bình luận',
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                    builder: (context) => CommentsSheet(noteRemoteId: _remoteId!),
+                  );
+                },
+              ),
+            ],
+          ],
         ),
         body: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
