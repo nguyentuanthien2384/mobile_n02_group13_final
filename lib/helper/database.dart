@@ -38,7 +38,7 @@ class DatabaseHelper {
       join(await getDatabasesPath(), dbFileName),
       onCreate: (db, version) async {
         await db.execute(
-          'create table if not exists notes(id integer primary key autoincrement, title text, content text, createdAt text not null, editedAt text, pinned integer not null default 0, remoteId text, isChecklist integer not null default 0)'
+          'create table if not exists notes(id integer primary key autoincrement, title text, content text, createdAt text not null, editedAt text, pinned integer not null default 0, remoteId text, isChecklist integer not null default 0, deleted integer not null default 0, reminderAt text, color integer not null default 0, folderId integer, isFavorite integer not null default 0)'
         );
         await db.execute(
           'create table if not exists tags(id integer primary key autoincrement, name text not null, createdAt text not null, remoteId text)'
@@ -46,9 +46,13 @@ class DatabaseHelper {
         await db.execute(
           'create table if not exists note_tags(noteId integer not null, tagId integer not null, unique(noteId, tagId) on conflict ignore)'
         );
+        await db.execute(
+          'create table if not exists folders(id integer primary key autoincrement, name text not null, color integer not null, icon text not null, createdAt text not null, remoteId text)'
+        );
         await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_remoteId ON tags(remoteId)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_note_tags_noteId ON note_tags(noteId)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_note_tags_tagId ON note_tags(tagId)');
+        await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_folders_remoteId ON folders(remoteId)');
       },
       onOpen: (db) async {
         // Migration: if old table `dogs` exists and `notes` doesn't, rename it
@@ -61,30 +65,47 @@ class DatabaseHelper {
         // Ensure `pinned` column exists on `notes`
         try {
           await db.execute('ALTER TABLE notes ADD COLUMN pinned integer not null default 0');
-        } catch (_) {
-          // ignore if column already exists
-        }
+        } catch (_) {}
         // Ensure `remoteId` column exists on `notes`
         try {
           await db.execute('ALTER TABLE notes ADD COLUMN remoteId text');
-        } catch (_) {
-          // ignore if column already exists
-        }
+        } catch (_) {}
         // Ensure `isChecklist` column exists on `notes`
         try {
           await db.execute('ALTER TABLE notes ADD COLUMN isChecklist integer not null default 0');
-        } catch (_) {
-          // ignore if column already exists
-        }
+        } catch (_) {}
+        // Ensure `deleted` column exists on `notes` (soft delete / trash)
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN deleted integer not null default 0');
+        } catch (_) {}
+        // Ensure `reminderAt` column exists on `notes` (local reminders)
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN reminderAt text');
+        } catch (_) {}
+        // Ensure color, folderId, and isFavorite columns exist on notes
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN color integer not null default 0');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN folderId integer');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN isFavorite integer not null default 0');
+        } catch (_) {}
+
         await db.execute(
           'CREATE TABLE IF NOT EXISTS tags(id integer primary key autoincrement, name text not null, createdAt text not null, remoteId text)'
         );
         await db.execute(
           'CREATE TABLE IF NOT EXISTS note_tags(noteId integer not null, tagId integer not null, unique(noteId, tagId) on conflict ignore)'
         );
+        await db.execute(
+          'CREATE TABLE IF NOT EXISTS folders(id integer primary key autoincrement, name text not null, color integer not null, icon text not null, createdAt text not null, remoteId text)'
+        );
         await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_remoteId ON tags(remoteId)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_note_tags_noteId ON note_tags(noteId)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_note_tags_tagId ON note_tags(tagId)');
+        await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_folders_remoteId ON folders(remoteId)');
         // Add unique index to prevent duplicate rows per remoteId
         await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_remoteId ON notes(remoteId)');
       },

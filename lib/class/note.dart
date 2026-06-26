@@ -11,7 +11,12 @@ class Note {
   bool pinned;
   String? remoteId; // Firestore document id for cross-device sync
   bool isChecklist;
+  DateTime? reminderAt; // local reminder time (managed locally, not synced)
   final List<int> tagIds;
+  int color; // Color code (0 for default, or color int values)
+  int? folderId; // Associated folder ID (null if not in folder)
+  bool isFavorite; // Is marked as favorite note
+  final List<String> collaborators; // List of user emails collaborating on this note
 
   Note({
     required this.id,
@@ -22,17 +27,14 @@ class Note {
     this.pinned = false,
     this.remoteId,
     this.isChecklist = false,
+    this.reminderAt,
     List<int>? tagIds,
-  }) : tagIds = List<int>.from(tagIds ?? const []);
-
-  // factory Note.fromJson(Map<String, dynamic> json) {
-  //   return Note(
-  //     id: json['id'],
-  //     title: json['title'],
-  //     content: json['content'],
-  //     date: DateTime.parse(json['date']),
-  //   );
-  // }
+    this.color = 0,
+    this.folderId,
+    this.isFavorite = false,
+    List<String>? collaborators,
+  })  : tagIds = List<int>.from(tagIds ?? const []),
+        collaborators = List<String>.from(collaborators ?? const []);
 
   Map<String, Object?> toMap() {
     return {
@@ -43,7 +45,44 @@ class Note {
       'pinned': pinned ? 1 : 0,
       'remoteId': remoteId,
       'isChecklist': isChecklist ? 1 : 0,
+      'color': color,
+      'folderId': folderId,
+      'isFavorite': isFavorite ? 1 : 0,
     };
+  }
+
+  Note copyWith({
+    int? id,
+    String? title,
+    String? content,
+    DateTime? createdAt,
+    DateTime? editedAt,
+    bool? pinned,
+    String? remoteId,
+    bool? isChecklist,
+    DateTime? reminderAt,
+    List<int>? tagIds,
+    int? color,
+    int? folderId,
+    bool? isFavorite,
+    List<String>? collaborators,
+  }) {
+    return Note(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      editedAt: editedAt ?? this.editedAt,
+      pinned: pinned ?? this.pinned,
+      remoteId: remoteId ?? this.remoteId,
+      isChecklist: isChecklist ?? this.isChecklist,
+      reminderAt: reminderAt ?? this.reminderAt,
+      tagIds: tagIds ?? this.tagIds,
+      color: color ?? this.color,
+      folderId: folderId ?? this.folderId,
+      isFavorite: isFavorite ?? this.isFavorite,
+      collaborators: collaborators ?? this.collaborators,
+    );
   }
 }
 
@@ -77,66 +116,13 @@ class NoteManager {
         _note.content = note.content;
         _note.editedAt = note.editedAt;
         _note.pinned = note.pinned;
+        _note.color = note.color;
+        _note.folderId = note.folderId;
+        _note.isFavorite = note.isFavorite;
       }
     }
   }
-
-//   NoteManager({List<Note>? notes}) {
-//     _notes = notes ?? [];
-//   }
-//
-//   factory NoteManager.fromJson(List<dynamic> json) {
-//     List<Note> notes = json.map((note) => Note.fromJson(note)).toList();
-//     return NoteManager(notes: notes);
-//   }
-//
-//   void addNote(Note note) {
-//     _notes.add(note);
-//   }
-//
-//   void removeNote(String id) {
-//     _notes.removeWhere((note) => note.id == id);
-//   }
-//
-//   void editNote({
-//     required String id,
-//     required String? newTitle,
-//     required String? newContent,
-//     required DateTime? date,
-//   }) {
-//     for (var note in _notes) {
-//       if (note.id == id) {
-//         note.title = newTitle;
-//         note.content = newContent;
-//         note.date = date;
-//       }
-//     }
-//   }
-//
-//   List<Map<String, dynamic>> toJson() {
-//     return _notes.map((note) => note.toJson()).toList();
-//   }
 }
-//
-// class NoteStorage {
-//   static const _key = 'note';
-//
-//   static Future<void> saveNotes(NoteManager noteManager) async {
-//     final prefs = await SharedPreferences.getInstance();
-//     final jsonList = noteManager.toJson();
-//     final encoded = jsonEncode(jsonList);
-//     await prefs.setString(_key, encoded);
-//   }
-//
-//   static Future<NoteManager> loadNotes() async {
-//     final prefs = await SharedPreferences.getInstance();
-//     final jsonList = prefs.getString(_key);
-//     if (jsonList == null || jsonList.isEmpty) {
-//       return NoteManager();
-//     }
-//     return NoteManager.fromJson(jsonDecode(jsonList));
-//   }
-// }
 
 class NoteProvider extends ChangeNotifier {
   final List<Note> _notes = [];
@@ -175,17 +161,7 @@ class NoteProvider extends ChangeNotifier {
     final idx = _notes.indexWhere((n) => n.id == noteId);
     if (idx != -1) {
       final note = _notes[idx];
-      _notes[idx] = Note(
-        id: note.id,
-        title: note.title,
-        content: note.content,
-        createdAt: note.createdAt,
-        editedAt: note.editedAt,
-        pinned: note.pinned,
-        remoteId: note.remoteId,
-        isChecklist: note.isChecklist,
-        tagIds: List<int>.from(tags),
-      );
+      _notes[idx] = note.copyWith(tagIds: List<int>.from(tags));
       notifyListeners();
     }
   }
@@ -196,17 +172,7 @@ class NoteProvider extends ChangeNotifier {
       final note = _notes[idx];
       if (!note.tagIds.contains(tagId)) {
         final updatedTags = List<int>.from(note.tagIds)..add(tagId);
-        _notes[idx] = Note(
-          id: note.id,
-          title: note.title,
-          content: note.content,
-          createdAt: note.createdAt,
-          editedAt: note.editedAt,
-          pinned: note.pinned,
-          remoteId: note.remoteId,
-          isChecklist: note.isChecklist,
-          tagIds: updatedTags,
-        );
+        _notes[idx] = note.copyWith(tagIds: updatedTags);
         notifyListeners();
       }
     }
@@ -218,17 +184,7 @@ class NoteProvider extends ChangeNotifier {
       final note = _notes[idx];
       if (note.tagIds.contains(tagId)) {
         final updatedTags = List<int>.from(note.tagIds)..remove(tagId);
-        _notes[idx] = Note(
-          id: note.id,
-          title: note.title,
-          content: note.content,
-          createdAt: note.createdAt,
-          editedAt: note.editedAt,
-          pinned: note.pinned,
-          remoteId: note.remoteId,
-          isChecklist: note.isChecklist,
-          tagIds: updatedTags,
-        );
+        _notes[idx] = note.copyWith(tagIds: updatedTags);
         notifyListeners();
       }
     }
