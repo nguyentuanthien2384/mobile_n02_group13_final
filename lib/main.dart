@@ -15,25 +15,89 @@ import 'screen/todo_list_screen.dart';
 import 'screen/rich_detail_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'provider/tag_provider.dart';
+import 'provider/theme_provider.dart';
+import 'provider/folder_provider.dart';
 import 'screen/tag_management_screen.dart';
 import 'screen/performance_test_screen.dart';
 import 'screen/note_view_screen.dart';
+import 'screen/statistics_screen.dart';
+import 'screen/trash_screen.dart';
+import 'services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'screen/main_shell.dart';
+import 'screen/onboarding_screen.dart';
+import 'screen/settings_screen.dart';
+import 'screen/folder_screen.dart';
+import 'screen/shared_notes_screen.dart';
+import 'screen/favorites_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Allow runtime font fetching with fallback to system font
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Guard against [core/duplicate-app]: only initialize when no app exists yet
+  // (the native side may auto-initialize from google-services.json, and hot
+  // restart can re-run main() while the default app is still alive).
+  if (Firebase.apps.isEmpty) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } on FirebaseException catch (e) {
+      if (e.code != 'duplicate-app') rethrow;
+    }
+  }
+  await NotificationService.instance.init();
+  final themeProvider = ThemeProvider();
+  await themeProvider.load();
   final database = await DatabaseHelper.database();
   final bool isLoggedIn = FirebaseAuth.instance.currentUser != null;
+
+  final prefs = await SharedPreferences.getInstance();
+  final bool onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+  String initialRoute;
+  if (!onboardingCompleted) {
+    initialRoute = '/onboarding';
+  } else if (!isLoggedIn) {
+    initialRoute = '/login';
+  } else {
+    initialRoute = '/';
+  }
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => NoteProvider()),
         ChangeNotifierProvider(create: (_) => TagProvider()),
+        ChangeNotifierProvider(create: (_) => FolderProvider()),
+        ChangeNotifierProvider.value(value: themeProvider),
       ],
-      child: TodoApp(database: database, isLoggedIn: isLoggedIn),
+      child: TodoApp(database: database, isLoggedIn: isLoggedIn, initialRoute: initialRoute),
+    ),
+  );
+}
+
+/// Builds the light/dark [ThemeData] used by the app for the given brightness.
+ThemeData buildAppTheme(Brightness brightness) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: Colors.blue,
+    brightness: brightness,
+  );
+  final base = ThemeData(useMaterial3: true, colorScheme: scheme);
+  return base.copyWith(
+    scaffoldBackgroundColor: brightness == Brightness.dark
+        ? scheme.surface
+        : scheme.surfaceContainerHighest,
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.primary,
+      iconTheme: const IconThemeData(color: Colors.white),
+      titleTextStyle: GoogleFonts.lobster(
+        color: Colors.white,
+        fontSize: 28,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    textTheme: GoogleFonts.robotoTextTheme(base.textTheme).apply(
+      bodyColor: scheme.onSurface,
+      displayColor: scheme.onSurface,
     ),
   );
 }
@@ -41,8 +105,9 @@ Future<void> main() async {
 class TodoApp extends StatefulWidget {
   final Database? database;
   final bool isLoggedIn;
+  final String initialRoute;
 
-  const TodoApp({super.key, this.database, required this.isLoggedIn});
+  const TodoApp({super.key, this.database, required this.isLoggedIn, required this.initialRoute});
 
   @override
   State<TodoApp> createState() => _TodoAppState();
@@ -131,32 +196,16 @@ class _TodoAppState extends State<TodoApp> {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = context.watch<ThemeProvider>().mode;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
-        scaffoldBackgroundColor: Theme.of(context).colorScheme.surfaceVariant,
-        appBarTheme: AppBarTheme(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          iconTheme: IconThemeData(color: Colors.white),
-          titleTextStyle: GoogleFonts.lobster(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textTheme: GoogleFonts.robotoTextTheme(
-          Theme.of(context).textTheme,
-        ).apply(
-          bodyColor: Theme.of(context).colorScheme.onSurface,
-          displayColor: Theme.of(context).colorScheme.onSurface,
-        ),
-      ),
-      initialRoute: widget.isLoggedIn ? '/' : '/login',
+      themeMode: themeMode,
+      theme: buildAppTheme(Brightness.light),
+      darkTheme: buildAppTheme(Brightness.dark),
+      initialRoute: widget.initialRoute,
       routes: {
         '/login': (context) => const LoginScreen(),
-        '/': (context) => HomeScreen(database: widget.database),
+        '/': (context) => const MainShell(),
         '/detail': (context) => const RichDetailScreen(),
         '/todolist': (context) => const TodoListScreen(),
         '/search': (context) => const SearchScreen(),
@@ -165,6 +214,13 @@ class _TodoAppState extends State<TodoApp> {
         '/tags': (context) => const TagManagementScreen(),
         '/performance-test': (context) => const PerformanceTestScreen(),
         '/view': (context) => const NoteViewScreen(),
+        '/statistics': (context) => const StatisticsScreen(),
+        '/trash': (context) => const TrashScreen(),
+        '/onboarding': (context) => const OnboardingScreen(),
+        '/settings': (context) => const SettingsScreen(),
+        '/folders': (context) => const FolderScreen(),
+        '/shared': (context) => const SharedNotesScreen(),
+        '/favorites': (context) => const FavoritesScreen(),
       },
       // Note: Deep link handling for email authentication
       // When app opens from email link, Android passes the link via intent
