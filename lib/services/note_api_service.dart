@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:todoapp/class/comment.dart';
+import 'package:todoapp/class/feed_post.dart';
 import 'package:todoapp/class/note.dart';
 import 'api_service.dart';
 
@@ -190,6 +191,192 @@ class NoteApiService {
     }
   }
 
+  // ══════════════════════════════════════════════════════════
+  //  PROFESSIONAL FEATURES
+  // ══════════════════════════════════════════════════════════
+
+  /// Full-text search across the user's own notes (server-side).
+  static Future<List<Note>> search(String query) async {
+    try {
+      final res = await ApiService.get('/notes/search?q=${Uri.encodeQueryComponent(query)}');
+      if (res.statusCode == 200) {
+        final List list = jsonDecode(res.body)['notes'] ?? [];
+        return list.map((e) => _parseNoteJson(e)).toList();
+      }
+    } catch (e) {
+      print('[NoteApiService] search error: $e');
+    }
+    return [];
+  }
+
+  // ─── Trash (soft delete) ──────────────────────────────────
+  static Future<List<Note>> fetchTrash() => _fetchList('/notes/trash');
+
+  static Future<bool> moveToTrash(String remoteId) =>
+      _simpleDelete('/notes/$remoteId');
+
+  static Future<bool> restoreFromTrash(String remoteId) =>
+      _simplePost('/notes/$remoteId/restore');
+
+  static Future<bool> deletePermanent(String remoteId) =>
+      _simpleDelete('/notes/$remoteId?permanent=true');
+
+  static Future<bool> emptyTrash() => _simpleDelete('/notes/trash/empty');
+
+  // ─── Archive ──────────────────────────────────────────────
+  static Future<List<Note>> fetchArchived() => _fetchList('/notes/archived');
+  static Future<bool> archive(String remoteId) => _simplePost('/notes/$remoteId/archive');
+  static Future<bool> unarchive(String remoteId) => _simplePost('/notes/$remoteId/unarchive');
+
+  // ─── Duplicate ────────────────────────────────────────────
+  static Future<Note?> duplicate(String remoteId) async {
+    try {
+      final res = await ApiService.post('/notes/$remoteId/duplicate', {});
+      if (res.statusCode == 201) return _parseNoteJson(jsonDecode(res.body));
+    } catch (e) {
+      print('[NoteApiService] duplicate error: $e');
+    }
+    return null;
+  }
+
+  // ─── Version history ──────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> fetchVersions(String remoteId) async {
+    try {
+      final res = await ApiService.get('/notes/$remoteId/versions');
+      if (res.statusCode == 200) {
+        final List list = jsonDecode(res.body)['versions'] ?? [];
+        return list.map((e) => e as Map<String, dynamic>).toList();
+      }
+    } catch (e) {
+      print('[NoteApiService] fetchVersions error: $e');
+    }
+    return [];
+  }
+
+  static Future<bool> restoreVersion(String remoteId, String versionId) =>
+      _simplePost('/notes/$remoteId/restore-version/$versionId');
+
+  // ══════════════════════════════════════════════════════════
+  //  SOCIAL FEATURES
+  // ══════════════════════════════════════════════════════════
+
+  /// Publish a note so it appears in the public feed.
+  static Future<bool> publish(String remoteId) => _simplePost('/notes/$remoteId/publish');
+  static Future<bool> unpublish(String remoteId) => _simplePost('/notes/$remoteId/unpublish');
+
+  /// Like / unlike a published post. Returns the fresh like count, or null.
+  static Future<({bool liked, int likesCount})?> toggleLike(String postId, bool currentlyLiked) async {
+    try {
+      final res = currentlyLiked
+          ? await ApiService.delete('/notes/$postId/like')
+          : await ApiService.post('/notes/$postId/like', {});
+      if (res.statusCode == 200) {
+        final d = jsonDecode(res.body);
+        return (liked: d['liked'] as bool? ?? false, likesCount: d['likesCount'] as int? ?? 0);
+      }
+    } catch (e) {
+      print('[NoteApiService] toggleLike error: $e');
+    }
+    return null;
+  }
+
+  static Future<bool> bookmark(String postId) => _simplePost('/notes/$postId/bookmark');
+  static Future<bool> removeBookmark(String postId) => _simpleDelete('/notes/$postId/bookmark');
+
+  static Future<List<FeedPost>> fetchBookmarks() async {
+    try {
+      final res = await ApiService.get('/notes/bookmarks');
+      if (res.statusCode == 200) {
+        final List list = jsonDecode(res.body)['posts'] ?? [];
+        return list.map((e) => FeedPost.fromJson(e)).toList();
+      }
+    } catch (e) {
+      print('[NoteApiService] fetchBookmarks error: $e');
+    }
+    return [];
+  }
+
+  // ─── Threaded comments ────────────────────────────────────
+  /// Add a comment or a reply (pass [parentId] for a reply).
+  static Future<Comment?> addThreadedComment(
+    String remoteId,
+    String text, {
+    String? ownerUid,
+    String? parentId,
+  }) async {
+    try {
+      final res = await ApiService.post('/notes/$remoteId/comments', {
+        'text': text,
+        'noteOwnerUid': ownerUid,
+        'parentId': parentId,
+      });
+      if (res.statusCode == 201) return Comment.fromJson(jsonDecode(res.body));
+    } catch (e) {
+      print('[NoteApiService] addThreadedComment error: $e');
+    }
+    return null;
+  }
+
+  static Future<({bool liked, int likesCount})?> toggleCommentLike(
+      String remoteId, String commentId, {String? ownerUid}) async {
+    try {
+      final q = ownerUid != null ? '?ownerUid=$ownerUid' : '';
+      final res = await ApiService.post('/notes/$remoteId/comments/$commentId/like$q', {});
+      if (res.statusCode == 200) {
+        final d = jsonDecode(res.body);
+        return (liked: d['liked'] as bool? ?? false, likesCount: d['likesCount'] as int? ?? 0);
+      }
+    } catch (e) {
+      print('[NoteApiService] toggleCommentLike error: $e');
+    }
+    return null;
+  }
+
+  static Future<bool> deleteComment(String remoteId, String commentId, {String? ownerUid}) async {
+    try {
+      final q = ownerUid != null ? '?ownerUid=$ownerUid' : '';
+      final res = await ApiService.delete('/notes/$remoteId/comments/$commentId$q');
+      return res.statusCode == 200;
+    } catch (e) {
+      print('[NoteApiService] deleteComment error: $e');
+      return false;
+    }
+  }
+
+  // ─── Small shared helpers ─────────────────────────────────
+  static Future<List<Note>> _fetchList(String path) async {
+    try {
+      final res = await ApiService.get(path);
+      if (res.statusCode == 200) {
+        final List list = jsonDecode(res.body)['notes'] ?? [];
+        return list.map((e) => _parseNoteJson(e)).toList();
+      }
+    } catch (e) {
+      print('[NoteApiService] _fetchList($path) error: $e');
+    }
+    return [];
+  }
+
+  static Future<bool> _simplePost(String path) async {
+    try {
+      final res = await ApiService.post(path, {});
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (e) {
+      print('[NoteApiService] POST $path error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _simpleDelete(String path) async {
+    try {
+      final res = await ApiService.delete(path);
+      return res.statusCode == 200;
+    } catch (e) {
+      print('[NoteApiService] DELETE $path error: $e');
+      return false;
+    }
+  }
+
   static Note _parseNoteJson(Map<String, dynamic> json) {
     return Note(
       id: json['localId'] as int? ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -203,6 +390,11 @@ class NoteApiService {
       color: json['color'] as int? ?? 0,
       folderId: json['folderId'] as int?,
       isFavorite: json['isFavorite'] as bool? ?? false,
+      isPublished: json['isPublished'] as bool? ?? false,
+      likesCount: json['likesCount'] as int? ?? 0,
+      commentsCount: json['commentsCount'] as int? ?? 0,
+      archived: json['archived'] as bool? ?? false,
+      deleted: json['deleted'] as bool? ?? false,
       // Note: tagIds are handled locally and mapped in sync services
     );
   }
