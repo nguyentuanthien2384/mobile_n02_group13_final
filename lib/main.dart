@@ -17,6 +17,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'provider/tag_provider.dart';
 import 'provider/theme_provider.dart';
 import 'provider/folder_provider.dart';
+import 'provider/social_provider.dart';
 import 'screen/tag_management_screen.dart';
 import 'screen/performance_test_screen.dart';
 import 'screen/note_view_screen.dart';
@@ -68,6 +69,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => NoteProvider()),
         ChangeNotifierProvider(create: (_) => TagProvider()),
         ChangeNotifierProvider(create: (_) => FolderProvider()),
+        ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider.value(value: themeProvider),
       ],
       child: TodoApp(database: database, isLoggedIn: isLoggedIn, initialRoute: initialRoute),
