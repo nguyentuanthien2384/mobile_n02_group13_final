@@ -17,6 +17,16 @@ class Note {
   int? folderId; // Associated folder ID (null if not in folder)
   bool isFavorite; // Is marked as favorite note
   final List<String> collaborators; // List of user emails collaborating on this note
+  // ─── Social / state fields (synced from backend; not stored in local toMap) ──
+  bool isPublished;
+  int likesCount;
+  int commentsCount;
+  bool archived;
+  bool deleted;
+  // ─── UI fields for the 3 note modes (My Notes / Reminder / Shopping) ──
+  String noteType; // 'note' | 'reminder' | 'shopping'
+  String? price;   // used by shopping items (e.g. "30k")
+  String? imagePath; // local cover image path (My Notes cards)
 
   Note({
     required this.id,
@@ -33,6 +43,14 @@ class Note {
     this.folderId,
     this.isFavorite = false,
     List<String>? collaborators,
+    this.isPublished = false,
+    this.likesCount = 0,
+    this.commentsCount = 0,
+    this.archived = false,
+    this.deleted = false,
+    this.noteType = 'note',
+    this.price,
+    this.imagePath,
   })  : tagIds = List<int>.from(tagIds ?? const []),
         collaborators = List<String>.from(collaborators ?? const []);
 
@@ -48,6 +66,9 @@ class Note {
       'color': color,
       'folderId': folderId,
       'isFavorite': isFavorite ? 1 : 0,
+      'noteType': noteType,
+      'price': price,
+      'imagePath': imagePath,
     };
   }
 
@@ -66,6 +87,14 @@ class Note {
     int? folderId,
     bool? isFavorite,
     List<String>? collaborators,
+    bool? isPublished,
+    int? likesCount,
+    int? commentsCount,
+    bool? archived,
+    bool? deleted,
+    String? noteType,
+    String? price,
+    String? imagePath,
   }) {
     return Note(
       id: id ?? this.id,
@@ -82,6 +111,14 @@ class Note {
       folderId: folderId ?? this.folderId,
       isFavorite: isFavorite ?? this.isFavorite,
       collaborators: collaborators ?? this.collaborators,
+      isPublished: isPublished ?? this.isPublished,
+      likesCount: likesCount ?? this.likesCount,
+      commentsCount: commentsCount ?? this.commentsCount,
+      archived: archived ?? this.archived,
+      deleted: deleted ?? this.deleted,
+      noteType: noteType ?? this.noteType,
+      price: price ?? this.price,
+      imagePath: imagePath ?? this.imagePath,
     );
   }
 }

@@ -44,6 +44,9 @@ class NoteDatabase {
       color: (e['color'] as int?) ?? 0,
       folderId: e['folderId'] as int?,
       isFavorite: ((e['isFavorite'] ?? 0) as int) == 1,
+      noteType: (e['noteType'] as String?) ?? 'note',
+      price: e['price'] as String?,
+      imagePath: e['imagePath'] as String?,
     );
   }
 
@@ -91,6 +94,9 @@ class NoteDatabase {
       color: (noteInfo.first['color'] as int?) ?? 0,
       folderId: noteInfo.first['folderId'] as int?,
       isFavorite: ((noteInfo.first['isFavorite'] ?? 0) as int) == 1,
+      noteType: (noteInfo.first['noteType'] as String?) ?? 'note',
+      price: noteInfo.first['price'] as String?,
+      imagePath: noteInfo.first['imagePath'] as String?,
     );
   }
 

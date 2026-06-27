@@ -38,7 +38,7 @@ class DatabaseHelper {
       join(await getDatabasesPath(), dbFileName),
       onCreate: (db, version) async {
         await db.execute(
-          'create table if not exists notes(id integer primary key autoincrement, title text, content text, createdAt text not null, editedAt text, pinned integer not null default 0, remoteId text, isChecklist integer not null default 0, deleted integer not null default 0, reminderAt text, color integer not null default 0, folderId integer, isFavorite integer not null default 0)'
+          'create table if not exists notes(id integer primary key autoincrement, title text, content text, createdAt text not null, editedAt text, pinned integer not null default 0, remoteId text, isChecklist integer not null default 0, deleted integer not null default 0, reminderAt text, color integer not null default 0, folderId integer, isFavorite integer not null default 0, noteType text not null default \'note\', price text, imagePath text)'
         );
         await db.execute(
           'create table if not exists tags(id integer primary key autoincrement, name text not null, createdAt text not null, remoteId text)'
@@ -91,6 +91,16 @@ class DatabaseHelper {
         } catch (_) {}
         try {
           await db.execute('ALTER TABLE notes ADD COLUMN isFavorite integer not null default 0');
+        } catch (_) {}
+        // Ensure UI-mode columns exist on notes (My Notes / Reminder / Shopping)
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN noteType text not null default \'note\'');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN price text');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE notes ADD COLUMN imagePath text');
         } catch (_) {}
 
         await db.execute(

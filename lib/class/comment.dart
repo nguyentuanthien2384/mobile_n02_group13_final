@@ -3,8 +3,11 @@ class Comment {
   final String userId;
   final String userName;
   final String userPhoto;
-  final String text;
+  String text;
   final DateTime createdAt;
+  final String? parentId; // null for top-level comments, set for replies
+  int likesCount;
+  bool liked;
 
   Comment({
     required this.id,
@@ -13,6 +16,9 @@ class Comment {
     required this.userPhoto,
     required this.text,
     required this.createdAt,
+    this.parentId,
+    this.likesCount = 0,
+    this.liked = false,
   });
 
   factory Comment.fromJson(Map<String, dynamic> json) {
@@ -23,6 +29,9 @@ class Comment {
       userPhoto: json['userPhoto'] as String? ?? '',
       text: json['text'] as String? ?? '',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      parentId: json['parentId'] as String?,
+      likesCount: json['likesCount'] as int? ?? 0,
+      liked: json['liked'] as bool? ?? false,
     );
   }
 
@@ -34,6 +43,9 @@ class Comment {
       'userPhoto': userPhoto,
       'text': text,
       'createdAt': createdAt.toIso8601String(),
+      'parentId': parentId,
+      'likesCount': likesCount,
+      'liked': liked,
     };
   }
 }
