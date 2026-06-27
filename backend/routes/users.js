@@ -95,4 +95,45 @@ router.get('/search', async (req, res) => {
   }
 });
 
+// ─── GET /api/users/stats ───────────────────────────────────
+router.get('/stats', async (req, res) => {
+  try {
+    const db = getFirestore();
+    const uid = req.user.uid;
+    const snap = await db.collection('users').doc(uid).collection('notes').get();
+    const notes = snap.docs.map((d) => d.data());
+
+    const active = notes.filter((n) => !n.deleted && !n.archived);
+    const wordCount = active.reduce((sum, n) => {
+      let text = n.content || '';
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) text = parsed.map((o) => (typeof o.insert === 'string' ? o.insert : '')).join('');
+      } catch (_) {}
+      return sum + text.split(/\s+/).filter(Boolean).length;
+    }, 0);
+
+    const profile = (await db.collection('users').doc(uid).get()).data() || {};
+
+    res.json({
+      totalNotes: active.length,
+      pinned: active.filter((n) => n.pinned).length,
+      favorites: active.filter((n) => n.isFavorite).length,
+      published: notes.filter((n) => n.isPublished).length,
+      archived: notes.filter((n) => n.archived && !n.deleted).length,
+      trashed: notes.filter((n) => n.deleted).length,
+      checklists: active.filter((n) => n.isChecklist).length,
+      withReminder: active.filter((n) => n.reminderAt).length,
+      totalLikes: notes.reduce((s, n) => s + (n.likesCount || 0), 0),
+      totalComments: notes.reduce((s, n) => s + (n.commentsCount || 0), 0),
+      wordCount,
+      followersCount: profile.followersCount || 0,
+      followingCount: profile.followingCount || 0,
+    });
+  } catch (err) {
+    console.error('[Users] stats error:', err);
+    res.status(500).json({ error: 'Không thể lấy thống kê' });
+  }
+});
+
 module.exports = router;

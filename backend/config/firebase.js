@@ -1,7 +1,7 @@
 const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
-const { MockFirestore } = require('./mockFirebase');
+const { MockFirestore, FieldValue: MockFieldValue } = require('./mockFirebase');
 require('dotenv').config();
 
 let initialized = false;
@@ -120,4 +120,10 @@ function getStorage() {
   return admin.storage();
 }
 
-module.exports = { initFirebase, getFirestore, getAuth, getStorage };
+function getFieldValue() {
+  initFirebase();
+  if (useMock) return MockFieldValue;
+  return admin.firestore.FieldValue;
+}
+
+module.exports = { initFirebase, getFirestore, getAuth, getStorage, getFieldValue };

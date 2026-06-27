@@ -28,8 +28,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    version: '1.0.0',
+    version: '2.0.0',
     timestamp: new Date().toISOString(),
+    features: ['notes', 'folders', 'tags', 'sharing', 'social-feed', 'follow',
+      'likes', 'comments', 'bookmarks', 'notifications', 'trash', 'archive',
+      'versions', 'search', 'stats'],
     message: 'TodoApp Backend API đang hoạt động',
   });
 });
@@ -46,12 +49,29 @@ app.get('/api/notes/public/:token', (req, res, next) => {
 // ─── Auth middleware for all /api routes below ──────────────
 app.use('/api', authMiddleware);
 
+// Ensure every authenticated user has a searchable profile (once per process).
+const { ensureUserProfile } = require('./utils/social');
+const _ensured = new Set();
+app.use('/api', async (req, res, next) => {
+  try {
+    if (req.user && !_ensured.has(req.user.uid)) {
+      await ensureUserProfile(req.user);
+      _ensured.add(req.user.uid);
+    }
+  } catch (e) {
+    console.warn('[Server] ensureUserProfile failed:', e.message);
+  }
+  next();
+});
+
 // ─── API Routes ─────────────────────────────────────────────
 app.use('/api/notes', notesRouter);
 app.use('/api/tags', require('./routes/tags'));
 app.use('/api/folders', require('./routes/folders'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/upload', require('./routes/upload'));
+app.use('/api/social', require('./routes/social'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // ─── 404 handler ────────────────────────────────────────────
 app.use((req, res) => {
