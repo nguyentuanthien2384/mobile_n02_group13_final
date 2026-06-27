@@ -1,0 +1,21 @@
+{
+  "uid": "demo_binh",
+  "email": "binh@demo.vn",
+  "emailLower": "binh@demo.vn",
+  "displayName": "Bình Trần",
+  "displayNameLower": "bình trần",
+  "photoURL": "",
+  "bio": "",
+  "followersCount": 3,
+  "followingCount": 3,
+  "publishedCount": 3,
+  "createdAt": "2026-06-27T00:05:01.241Z",
+  "settings": {
+    "language": "vi",
+    "defaultView": "list",
+    "fontSize": "medium",
+    "sortMode": "editedDesc",
+    "notificationsEnabled": true
+  },
+  "unreadNotifications": 17
+}

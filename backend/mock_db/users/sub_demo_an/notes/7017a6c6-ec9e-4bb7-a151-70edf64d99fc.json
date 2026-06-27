@@ -1,0 +1,25 @@
+{
+  "title": "Lộ trình học Flutter trong 30 ngày",
+  "content": "[{\"insert\":\"Lộ trình học Flutter trong 30 ngày\"},{\"insert\":\"\\n\",\"attributes\":{\"header\":1}},{\"insert\":\"Mình tổng hợp lại lộ trình tự học Flutter từ con số 0.\\n\"},{\"insert\":\"Tuần 1: Nền tảng Dart\"},{\"insert\":\"\\n\",\"attributes\":{\"header\":2}},{\"insert\":\"Biến, hàm, class\"},{\"insert\":\"\\n\",\"attributes\":{\"list\":\"bullet\"}},{\"insert\":\"Async/await & Future\"},{\"insert\":\"\\n\",\"attributes\":{\"list\":\"bullet\"}},{\"insert\":\"Tuần 2: Widget cơ bản\"},{\"insert\":\"\\n\",\"attributes\":{\"header\":2}},{\"insert\":\"Stateless vs Stateful\"},{\"insert\":\"\\n\",\"attributes\":{\"list\":\"bullet\"}},{\"insert\":\"Layout: Row, Column, Stack\"},{\"insert\":\"\\n\",\"attributes\":{\"list\":\"bullet\"}},{\"insert\":\"Kiên trì mỗi ngày 1 giờ là được nhé!\\n\"}]",
+  "createdAt": "2026-06-27T00:05:01.155Z",
+  "editedAt": "2026-06-27T00:05:01.155Z",
+  "pinned": false,
+  "isChecklist": false,
+  "tags": [
+    "flutter",
+    "lập trình",
+    "dart"
+  ],
+  "color": 0,
+  "folderId": null,
+  "isFavorite": false,
+  "localId": null,
+  "reminderAt": null,
+  "coverImage": "",
+  "deleted": false,
+  "archived": false,
+  "isPublished": true,
+  "likesCount": 5,
+  "commentsCount": 2,
+  "publishedAt": "2026-06-27T00:05:01.193Z"
+}

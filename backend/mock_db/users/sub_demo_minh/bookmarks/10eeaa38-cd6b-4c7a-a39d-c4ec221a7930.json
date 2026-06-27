@@ -1,0 +1,19 @@
+{
+  "noteId": "10eeaa38-cd6b-4c7a-a39d-c4ec221a7930",
+  "authorUid": "demo_an",
+  "authorName": "An Nguyễn",
+  "authorPhoto": "",
+  "title": "Mẹo tối ưu hiệu năng ListView",
+  "excerpt": "Tối ưu ListView Dùng ListView.builder thay vì ListView thường khi danh sách dài. Luôn dùng key ổn định cho item.",
+  "color": 0,
+  "tags": [
+    "flutter",
+    "hiệu năng"
+  ],
+  "coverImage": "",
+  "likesCount": 2,
+  "commentsCount": 2,
+  "publishedAt": "2026-06-27T00:05:01.224Z",
+  "editedAt": "2026-06-27T00:05:01.218Z",
+  "bookmarkedAt": "2026-06-27T00:05:01.787Z"
+}

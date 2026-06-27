@@ -1,0 +1,19 @@
+{
+  "noteId": "e2fab619-cf06-478a-a54e-f3453d782500",
+  "authorUid": "demo_an",
+  "authorName": "An Nguyễn",
+  "authorPhoto": "",
+  "title": "State management nên chọn cái nào?",
+  "excerpt": "State management nên chọn gì? So sánh nhanh Provider, Riverpod và Bloc cho người mới. Provider: đơn giản, dễ bắt đầu Riverpod: an toàn hơn, testable Bloc: phù hợp dự án lớn",
+  "color": 0,
+  "tags": [
+    "flutter",
+    "kiến trúc"
+  ],
+  "coverImage": "",
+  "likesCount": 2,
+  "commentsCount": 2,
+  "publishedAt": "2026-06-27T00:05:01.210Z",
+  "editedAt": "2026-06-27T00:05:01.202Z",
+  "bookmarkedAt": "2026-06-27T00:05:01.785Z"
+}

@@ -1,0 +1,21 @@
+{
+  "uid": "demo_chi",
+  "email": "chi@demo.vn",
+  "emailLower": "chi@demo.vn",
+  "displayName": "Chi Lê",
+  "displayNameLower": "chi lê",
+  "photoURL": "",
+  "bio": "",
+  "followersCount": 4,
+  "followingCount": 4,
+  "publishedCount": 3,
+  "createdAt": "2026-06-27T00:05:01.289Z",
+  "settings": {
+    "language": "vi",
+    "defaultView": "list",
+    "fontSize": "medium",
+    "sortMode": "editedDesc",
+    "notificationsEnabled": true
+  },
+  "unreadNotifications": 20
+}

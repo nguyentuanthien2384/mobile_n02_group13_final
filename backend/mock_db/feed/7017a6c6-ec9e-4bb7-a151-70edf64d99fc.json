@@ -1,0 +1,19 @@
+{
+  "noteId": "7017a6c6-ec9e-4bb7-a151-70edf64d99fc",
+  "authorUid": "demo_an",
+  "authorName": "An Nguyễn",
+  "authorPhoto": "",
+  "title": "Lộ trình học Flutter trong 30 ngày",
+  "excerpt": "Lộ trình học Flutter trong 30 ngày Mình tổng hợp lại lộ trình tự học Flutter từ con số 0. Tuần 1: Nền tảng Dart Biến, hàm, class Async/await & Future Tuần 2: Widget cơ bản Stateles…",
+  "color": 0,
+  "tags": [
+    "flutter",
+    "lập trình",
+    "dart"
+  ],
+  "coverImage": "",
+  "likesCount": 5,
+  "commentsCount": 2,
+  "publishedAt": "2026-06-27T00:05:01.193Z",
+  "editedAt": "2026-06-27T00:05:01.155Z"
+}
