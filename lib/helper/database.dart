@@ -32,7 +32,7 @@ class DatabaseHelper {
     }
     
     // Create database file based on user ID or use default if no user
-    final dbFileName = userId != null ? 'notes_${userId}.db' : 'notes_guest.db';
+    final dbFileName = userId != null ? 'notes_$userId.db' : 'notes_guest.db';
     
     final database = await openDatabase(
       join(await getDatabasesPath(), dbFileName),
@@ -56,52 +56,34 @@ class DatabaseHelper {
       },
       onOpen: (db) async {
         // Migration: if old table `dogs` exists and `notes` doesn't, rename it
-        final tables = await db.rawQuery('SELECT name FROM sqlite_master WHERE type = "table"');
+        final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
         final hasDogs = tables.any((t) => (t['name'] as String?) == 'dogs');
         final hasNotes = tables.any((t) => (t['name'] as String?) == 'notes');
         if (hasDogs && !hasNotes) {
           await db.execute('ALTER TABLE dogs RENAME TO notes');
         }
-        // Ensure `pinned` column exists on `notes`
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN pinned integer not null default 0');
-        } catch (_) {}
-        // Ensure `remoteId` column exists on `notes`
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN remoteId text');
-        } catch (_) {}
-        // Ensure `isChecklist` column exists on `notes`
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN isChecklist integer not null default 0');
-        } catch (_) {}
-        // Ensure `deleted` column exists on `notes` (soft delete / trash)
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN deleted integer not null default 0');
-        } catch (_) {}
-        // Ensure `reminderAt` column exists on `notes` (local reminders)
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN reminderAt text');
-        } catch (_) {}
-        // Ensure color, folderId, and isFavorite columns exist on notes
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN color integer not null default 0');
-        } catch (_) {}
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN folderId integer');
-        } catch (_) {}
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN isFavorite integer not null default 0');
-        } catch (_) {}
-        // Ensure UI-mode columns exist on notes (My Notes / Reminder / Shopping)
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN noteType text not null default \'note\'');
-        } catch (_) {}
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN price text');
-        } catch (_) {}
-        try {
-          await db.execute('ALTER TABLE notes ADD COLUMN imagePath text');
-        } catch (_) {}
+        // Read existing columns once to avoid exception-driven migrations every launch.
+        final noteColumns = await db.rawQuery('PRAGMA table_info(notes)');
+        final existing = {
+          for (final col in noteColumns) (col['name'] as String?) ?? '',
+        };
+        Future<void> addColumnIfMissing(String name, String sqlTypeAndDefault) async {
+          if (existing.contains(name)) return;
+          await db.execute('ALTER TABLE notes ADD COLUMN $name $sqlTypeAndDefault');
+          existing.add(name);
+        }
+
+        await addColumnIfMissing('pinned', 'integer not null default 0');
+        await addColumnIfMissing('remoteId', 'text');
+        await addColumnIfMissing('isChecklist', 'integer not null default 0');
+        await addColumnIfMissing('deleted', 'integer not null default 0');
+        await addColumnIfMissing('reminderAt', 'text');
+        await addColumnIfMissing('color', 'integer not null default 0');
+        await addColumnIfMissing('folderId', 'integer');
+        await addColumnIfMissing('isFavorite', 'integer not null default 0');
+        await addColumnIfMissing('noteType', 'text not null default \'note\'');
+        await addColumnIfMissing('price', 'text');
+        await addColumnIfMissing('imagePath', 'text');
 
         await db.execute(
           'CREATE TABLE IF NOT EXISTS tags(id integer primary key autoincrement, name text not null, createdAt text not null, remoteId text)'
@@ -151,7 +133,7 @@ class DatabaseHelper {
   // Clear data for specific user
   static Future<void> clearDataForUser(String userId) async {
     final dbPath = await getDatabasesPath();
-    final dbFile = File(join(dbPath, 'notes_${userId}.db'));
+    final dbFile = File(join(dbPath, 'notes_$userId.db'));
     if (await dbFile.exists()) {
       try {
         await dbFile.delete();

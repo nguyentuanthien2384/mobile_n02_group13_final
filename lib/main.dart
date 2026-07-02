@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:todoapp/helper/database.dart';
-import 'screen/home_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screen/search_screen.dart';
 import 'screen/select_screen.dart';
 import 'package:provider/provider.dart';
@@ -24,7 +24,6 @@ import 'screen/note_view_screen.dart';
 import 'screen/statistics_screen.dart';
 import 'screen/trash_screen.dart';
 import 'services/notification_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'screen/main_shell.dart';
 import 'screen/onboarding_screen.dart';
 import 'screen/settings_screen.dart';
@@ -138,62 +137,6 @@ class _TodoAppState extends State<TodoApp> {
         }
       });
     }
-  }
-
-  Future<bool> _handleEmailLink(BuildContext context, String link) async {
-    try {
-      final auth = FirebaseAuth.instance;
-      
-      // Check if this is a sign-in email link
-      if (auth.isSignInWithEmailLink(link)) {
-        // Retrieve the saved email
-        final prefs = await SharedPreferences.getInstance();
-        final email = prefs.getString('emailForSignIn');
-        
-        if (email == null || email.isEmpty) {
-          // Email not found, show error
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Please request a new sign-in link'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return false;
-        }
-
-        // Sign in with email link
-        final userCredential = await auth.signInWithEmailLink(
-          email: email,
-          emailLink: link,
-        );
-
-        // Clear saved email
-        await prefs.remove('emailForSignIn');
-
-        if (userCredential.user != null && mounted) {
-          Navigator.of(context).pushReplacementNamed('/');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Successfully signed in!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          return true;
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sign-in failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-    return false;
   }
 
   @override

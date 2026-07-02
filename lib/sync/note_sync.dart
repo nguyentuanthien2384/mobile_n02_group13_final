@@ -4,7 +4,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/database/note_database.dart';
 import 'package:todoapp/database/tag_database.dart';
-import 'package:todoapp/helper/database.dart';
 import 'package:todoapp/services/note_api_service.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -279,24 +278,6 @@ class NoteSyncService {
 
   static Future<void> pushNoteTags(Database db, int noteId) async {
     // Keep tag sync logic local or simple for now
-  }
-
-  static Future<List<String>> _mapLocalTagsToRemote(Database db, Iterable<int> tagIds) async {
-    if (tagIds.isEmpty) return const [];
-    final placeholders = List.filled(tagIds.length, '?').join(',');
-    final rows = await db.rawQuery('SELECT id, remoteId FROM tags WHERE id IN ($placeholders)', tagIds.toList());
-    final Map<int, String?> remoteById = {
-      for (final row in rows)
-        row['id'] as int: row['remoteId'] as String?,
-    };
-    final result = <String>[];
-    for (final id in tagIds) {
-      final remoteId = remoteById[id];
-      if (remoteId != null && remoteId.isNotEmpty) {
-        result.add(remoteId);
-      }
-    }
-    return result;
   }
 
   static Future<List<int>> _mapRemoteTagsToLocal(Database db, Iterable<dynamic> remoteIds) async {
