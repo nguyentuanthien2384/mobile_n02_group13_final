@@ -46,7 +46,7 @@ class AudioEmbedBuilder extends EmbedBuilder {
   }
 
   @override
-  String toPlainText(Embed embed) {
+  String toPlainText(Embed node) {
     return '[Audio]';
   }
 }
@@ -166,7 +166,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

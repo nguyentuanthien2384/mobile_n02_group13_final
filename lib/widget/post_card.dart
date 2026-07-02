@@ -76,7 +76,7 @@ class _PostCardState extends State<PostCard> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.4)),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),

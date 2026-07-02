@@ -124,7 +124,7 @@ class _ShareDialogState extends State<ShareDialog> {
                       hintStyle: const TextStyle(fontSize: 13),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
-                      fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                      fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
@@ -173,7 +173,7 @@ class _ShareDialogState extends State<ShareDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(

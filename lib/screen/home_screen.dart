@@ -30,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription? _sub;
   StreamSubscription? _tagSub;
   StreamSubscription<List<ConnectivityResult>>? _connSub;
+  bool _isSyncing = false;
   bool _showFabMenu = false;
   int? _selectedTagId;
   NoteSortMode _sortMode = NoteSortMode.editedDesc;
@@ -43,85 +44,77 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initializeDatabase() async {
     // Always get fresh database to ensure it's for current user
     final db = await DatabaseHelper.database();
-    if (mounted) {
-      setState(() {
-        _db = db;
-      });
-      _loadNotes();
-    }
+    if (!mounted) return;
+    setState(() {
+      _db = db;
+    });
+    await _loadLocalData(db);
+    _setupRealtimeListeners(db);
+    unawaited(
+      Future<void>.delayed(
+        const Duration(milliseconds: 600),
+        () => _syncAllAndRefresh(db),
+      ),
+    );
   }
 
-  Future<void> _refreshData() async {
-    final db = _db;
-    if (db == null) return;
-    
-    // Force sync from Firestore
-    var localTags = await TagDatabase.getTags(db);
-    await TagSyncService.syncAll(db, localTags);
-    localTags = await TagDatabase.getTags(db);
-    
-    var localNotes = await NoteDatabase.getNotes(db);
-    await NoteSyncService.syncAll(db, localNotes);
-    localNotes = await NoteDatabase.getNotes(db);
-    
+  Future<void> _loadLocalData(Database db) async {
+    final noteProvider = Provider.of<NoteProvider>(context, listen: false);
+    final tagProvider = Provider.of<TagProvider>(context, listen: false);
+    final localTags = await TagDatabase.getTags(db);
+    final localNotes = await NoteDatabase.getNotes(db);
     if (!mounted) return;
-    Provider.of<TagProvider>(context, listen: false).setTags(localTags);
-    Provider.of<NoteProvider>(context, listen: false).setNotes(localNotes);
+    tagProvider.setTags(localTags);
+    noteProvider.setNotes(localNotes);
   }
 
-  Future<void> _loadNotes() async {
-    final db = _db;
-    if (db == null) return;
-
-    var localTags = await TagDatabase.getTags(db);
-    Provider.of<TagProvider>(context, listen: false).setTags(localTags);
-    var localNotes = await NoteDatabase.getNotes(db);
-    Provider.of<NoteProvider>(context, listen: false).setNotes(localNotes);
-
-    await TagSyncService.syncAll(db, localTags);
-    localTags = await TagDatabase.getTags(db);
-    Provider.of<TagProvider>(context, listen: false).setTags(localTags);
-
-    localNotes = await NoteDatabase.getNotes(db);
-    Provider.of<NoteProvider>(context, listen: false).setNotes(localNotes);
-    await NoteSyncService.syncAll(db, localNotes);
-
-    localNotes = await NoteDatabase.getNotes(db);
-    localTags = await TagDatabase.getTags(db);
-    if (!mounted) return;
-    Provider.of<NoteProvider>(context, listen: false).setNotes(localNotes);
-    Provider.of<TagProvider>(context, listen: false).setTags(localTags);
-
+  void _setupRealtimeListeners(Database db) {
     _sub ??= NoteSyncService.listenRealtime(db, () async {
+      final noteProvider = Provider.of<NoteProvider>(context, listen: false);
+      final tagProvider = Provider.of<TagProvider>(context, listen: false);
       final latestNotes = await NoteDatabase.getNotes(db);
       final latestTags = await TagDatabase.getTags(db);
       if (!mounted) return;
-      Provider.of<NoteProvider>(context, listen: false).setNotes(latestNotes);
-      Provider.of<TagProvider>(context, listen: false).setTags(latestTags);
+      noteProvider.setNotes(latestNotes);
+      tagProvider.setTags(latestTags);
     });
 
     _tagSub ??= TagSyncService.listenRealtime(db, () async {
+      final noteProvider = Provider.of<NoteProvider>(context, listen: false);
+      final tagProvider = Provider.of<TagProvider>(context, listen: false);
       final latestNotes = await NoteDatabase.getNotes(db);
       final latestTags = await TagDatabase.getTags(db);
       if (!mounted) return;
-      Provider.of<NoteProvider>(context, listen: false).setNotes(latestNotes);
-      Provider.of<TagProvider>(context, listen: false).setTags(latestTags);
+      noteProvider.setNotes(latestNotes);
+      tagProvider.setTags(latestTags);
     });
 
     _connSub ??= Connectivity().onConnectivityChanged.listen((results) async {
       final isOnline = results.any((r) => r != ConnectivityResult.none);
       if (isOnline) {
-        final currentTags = await TagDatabase.getTags(db);
-        await TagSyncService.syncAll(db, currentTags);
-        final nowLocal = await NoteDatabase.getNotes(db);
-        await NoteSyncService.syncAll(db, nowLocal);
-        final latest = await NoteDatabase.getNotes(db);
-        final latestTags = await TagDatabase.getTags(db);
-        if (!mounted) return;
-        Provider.of<NoteProvider>(context, listen: false).setNotes(latest);
-        Provider.of<TagProvider>(context, listen: false).setTags(latestTags);
+        await _syncAllAndRefresh(db);
       }
     });
+  }
+
+  Future<void> _syncAllAndRefresh(Database db) async {
+    if (_isSyncing) return;
+    _isSyncing = true;
+    try {
+      final noteProvider = Provider.of<NoteProvider>(context, listen: false);
+      final tagProvider = Provider.of<TagProvider>(context, listen: false);
+      final currentTags = await TagDatabase.getTags(db);
+      await TagSyncService.syncAll(db, currentTags);
+      final currentNotes = await NoteDatabase.getNotes(db);
+      await NoteSyncService.syncAll(db, currentNotes);
+      final refreshedNotes = await NoteDatabase.getNotes(db);
+      final refreshedTags = await TagDatabase.getTags(db);
+      if (!mounted) return;
+      noteProvider.setNotes(refreshedNotes);
+      tagProvider.setTags(refreshedTags);
+    } finally {
+      _isSyncing = false;
+    }
   }
 
   Future<void> _addNoteButton(String choice) async {
@@ -161,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       await NoteDatabase.updateNote(db, newNote);
     }
+    if (!mounted) return;
     Provider.of<NoteProvider>(context, listen: false).addNote(newNote);
     try {
       await NoteSyncService.pushAdded(db, newNote);
@@ -177,6 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     final updated = await NoteDatabase.getNote(db, newNote.id);
+    if (!mounted) return;
     Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
   }
 

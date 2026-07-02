@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:todoapp/provider/social_provider.dart';
 import 'package:todoapp/screen/notes_home_screen.dart';
-import 'package:todoapp/screen/home_screen.dart';
 import 'package:todoapp/screen/folder_screen.dart';
 import 'package:todoapp/screen/explore_screen.dart';
 import 'package:todoapp/screen/shared_notes_screen.dart';
@@ -71,7 +70,7 @@ class _MainShellState extends State<MainShell> {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, -2),
             ),

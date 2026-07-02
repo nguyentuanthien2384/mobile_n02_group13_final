@@ -139,7 +139,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen> {
       batchCount = 0;
 
       for (int i = 0; i < _noteCount; i++) {
-        final title = _sampleTitles[_random.nextInt(_sampleTitles.length)] + ' ${i + 1}';
+        final title = '${_sampleTitles[_random.nextInt(_sampleTitles.length)]} ${i + 1}';
         final content = _sampleContents[_random.nextInt(_sampleContents.length)];
         final isChecklist = _random.nextBool();
         final pinned = _random.nextDouble() < 0.1; // 10% pinned
@@ -329,7 +329,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    await _refreshData(context);
+                    await _refreshData();
                   },
                   icon: const Icon(Icons.refresh),
                   label: const Text('Refresh Notes from Firestore'),
@@ -345,12 +345,12 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen> {
     );
   }
 
-  Future<void> _refreshData(BuildContext context) async {
+  Future<void> _refreshData() async {
     try {
       final db = await DatabaseHelper.database();
       
       // Show loading
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Syncing from Firestore...')),
         );
@@ -360,15 +360,17 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen> {
       var localTags = await TagDatabase.getTags(db);
       await TagSyncService.syncAll(db, localTags);
       localTags = await TagDatabase.getTags(db);
+      if (!mounted) return;
       Provider.of<TagProvider>(context, listen: false).setTags(localTags);
 
       // Sync notes
       var localNotes = await NoteDatabase.getNotes(db);
       await NoteSyncService.syncAll(db, localNotes);
       localNotes = await NoteDatabase.getNotes(db);
+      if (!mounted) return;
       Provider.of<NoteProvider>(context, listen: false).setNotes(localNotes);
 
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Synced! Loaded ${localNotes.length} notes and ${localTags.length} tags.'),
@@ -377,7 +379,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen> {
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error syncing: $e'),

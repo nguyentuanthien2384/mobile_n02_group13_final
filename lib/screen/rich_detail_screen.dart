@@ -433,21 +433,22 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
     _ensureControllerListener();
     _ensureSub();
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         if (_dirty) {
-          final result = <String, dynamic>{
+          final data = <String, dynamic>{
             'title': _title.text,
             'content': _toContent(),
             'tags': _tagIds,
             'id': _noteId,
             'remoteId': _remoteId,
           };
-          Navigator.pop(context, result);
+          Navigator.pop(context, data);
         } else {
           Navigator.pop(context, null);
         }
-        return false;
       },
       child: Scaffold(
         appBar: AppBar(
@@ -547,7 +548,7 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                       icon: Icon(Icons.format_bold, color: _isActive(Attribute.bold) ? Theme.of(context).colorScheme.primary : null),
                       onPressed: () => _toggleAttribute(Attribute.bold),
                       style: IconButton.styleFrom(
-                        backgroundColor: _isActive(Attribute.bold) ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                        backgroundColor: _isActive(Attribute.bold) ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1) : null,
                       ),
                     ),
                     IconButton(
@@ -555,7 +556,7 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                       icon: Icon(Icons.format_italic, color: _isActive(Attribute.italic) ? Theme.of(context).colorScheme.primary : null),
                       onPressed: () => _toggleAttribute(Attribute.italic),
                       style: IconButton.styleFrom(
-                        backgroundColor: _isActive(Attribute.italic) ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                        backgroundColor: _isActive(Attribute.italic) ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1) : null,
                       ),
                     ),
                     IconButton(
@@ -563,7 +564,7 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                       icon: Icon(Icons.format_underline, color: _isActive(Attribute.underline) ? Theme.of(context).colorScheme.primary : null),
                       onPressed: () => _toggleAttribute(Attribute.underline),
                       style: IconButton.styleFrom(
-                        backgroundColor: _isActive(Attribute.underline) ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                        backgroundColor: _isActive(Attribute.underline) ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1) : null,
                       ),
                     ),
                     IconButton(
@@ -571,7 +572,7 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                       icon: Icon(Icons.format_strikethrough, color: _isActive(Attribute.strikeThrough) ? Theme.of(context).colorScheme.primary : null),
                       onPressed: () => _toggleAttribute(Attribute.strikeThrough),
                       style: IconButton.styleFrom(
-                        backgroundColor: _isActive(Attribute.strikeThrough) ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                        backgroundColor: _isActive(Attribute.strikeThrough) ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1) : null,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -585,7 +586,7 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                       ),
                       onPressed: _isRecording ? _stopRecording : _startRecording,
                       style: IconButton.styleFrom(
-                        backgroundColor: _isRecording ? Colors.red.withOpacity(0.1) : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        backgroundColor: _isRecording ? Colors.red.withValues(alpha: 0.1) : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -594,7 +595,7 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                       icon: Icon(Icons.image, color: Theme.of(context).colorScheme.primary),
                       onPressed: _uploadImage,
                       style: IconButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                       ),
                     ),
                     IconButton(
@@ -612,7 +613,7 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                         });
                       },
                       style: IconButton.styleFrom(
-                        backgroundColor: _showVirtualKeyboard ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                        backgroundColor: _showVirtualKeyboard ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1) : null,
                       ),
                     ),
                     if (_isRecording)
@@ -707,7 +708,7 @@ class ImageEmbedBuilder extends EmbedBuilder {
   }
 
   @override
-  String toPlainText(Embed embed) {
+  String toPlainText(Embed node) {
     return '[Image]';
   }
 }
@@ -842,7 +843,7 @@ class _VirtualKeyboardState extends State<VirtualKeyboard> {
                 'Nhập',
                 widget.onEnter,
                 widthFactor: 2.0,
-                color: theme.colorScheme.primary.withOpacity(0.2),
+                color: theme.colorScheme.primary.withValues(alpha: 0.2),
               ),
             ],
           ),

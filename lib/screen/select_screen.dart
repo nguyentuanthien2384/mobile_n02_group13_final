@@ -45,6 +45,7 @@ class _SelectScreenState extends State<SelectScreen> {
     );
     if (confirmed != true) return;
 
+    if (!mounted) return;
     final provider = Provider.of<NoteProvider>(context, listen: false);
     for (final id in _selectedIds) {
       if (_db != null) {
@@ -94,7 +95,7 @@ class _SelectScreenState extends State<SelectScreen> {
             final note = notes[index];
             final checked = _selectedIds.contains(note.id);
             return Material(
-              color: theme.colorScheme.surfaceVariant,
+              color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(16),
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),

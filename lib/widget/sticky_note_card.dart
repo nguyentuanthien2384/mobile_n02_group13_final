@@ -58,13 +58,13 @@ class StickyNoteCard extends StatelessWidget {
               body,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: fg.withOpacity(0.92), fontSize: 14, height: 1.3),
+              style: TextStyle(color: fg.withValues(alpha: 0.92), fontSize: 14, height: 1.3),
             ),
           ],
           const SizedBox(height: 12),
           Text(
             formatVietnameseDate(note.editedAt ?? note.createdAt),
-            style: TextStyle(color: fg.withOpacity(0.8), fontSize: 11, letterSpacing: 0.3),
+            style: TextStyle(color: fg.withValues(alpha: 0.8), fontSize: 11, letterSpacing: 0.3),
           ),
         ],
       ),
@@ -113,7 +113,7 @@ class StickyNoteCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.25),
+              color: Colors.black.withValues(alpha: 0.25),
               blurRadius: 8,
               offset: const Offset(3, 6),
             ),
@@ -160,7 +160,7 @@ class StickyNoteCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.10),
+              color: Colors.black.withValues(alpha: 0.10),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),

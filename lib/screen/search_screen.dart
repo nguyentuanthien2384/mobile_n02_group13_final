@@ -85,6 +85,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 await NoteDatabase.deleteNote(_db!, id);
                 await NoteSyncService.pushDeleted(note);
               }
+              if (!mounted) return;
               Provider.of<NoteProvider>(context, listen: false).removeNote(id);
             },
           ),

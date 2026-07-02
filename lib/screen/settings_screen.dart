@@ -98,7 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: InputDecoration(
                       hintText: 'http://localhost:3000/api',
                       filled: true,
-                      fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                      fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,

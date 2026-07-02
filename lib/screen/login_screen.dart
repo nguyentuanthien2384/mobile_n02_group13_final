@@ -92,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // URL must be whitelisted in Firebase Console → Authentication → Settings → Authorized domains
       // Use domain root - Firebase will handle the auth path automatically
       final actionCodeSettings = ActionCodeSettings(
-        url: 'https://hwnoteapp.firebaseapp.com',
+        url: 'https://mobile-final-3.firebaseapp.com',
         handleCodeInApp: true,
         androidPackageName: 'com.example.todoapp',
         androidMinimumVersion: '12',
@@ -215,7 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Text(
                             'We\'ll send you a sign-in link to your email',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                               fontSize: 14,
                             ),
                             textAlign: TextAlign.center,
@@ -276,18 +276,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 16),
                           Row(
                             children: [
-                              Expanded(child: Divider(color: Colors.white.withOpacity(0.5))),
+                              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.5))),
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
                                 child: Text(
                                   'OR',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.8),
+                                    color: Colors.white.withValues(alpha: 0.8),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
-                              Expanded(child: Divider(color: Colors.white.withOpacity(0.5))),
+                              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.5))),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -335,7 +335,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Text(
                             'We sent a sign-in link to ${_emailController.text}',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                               fontSize: 14,
                             ),
                             textAlign: TextAlign.center,
@@ -344,7 +344,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Text(
                             'Click the link in the email to sign in. You can close this screen and return after clicking the link.',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withValues(alpha: 0.8),
                               fontSize: 13,
                             ),
                             textAlign: TextAlign.center,
@@ -359,7 +359,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             },
                             child: Text(
                               'Use a different email',
-                              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.9)),
                             ),
                           ),
                         ],

@@ -66,7 +66,7 @@ class _DetailScreenState extends State<DetailScreen> {
       });
     }
 
-30;   // Realtime subscribe to this note to reflect remote edits (simple merge)
+    // Realtime subscribe to this note to reflect remote edits (simple merge)
     void ensureSubscription() {
       if (_remoteId == null || _docSub != null) return;
       final user = FirebaseAuth.instance.currentUser;
@@ -105,21 +105,22 @@ class _DetailScreenState extends State<DetailScreen> {
     }
     ensureSubscription();
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         if (_dirty) {
-          final result = <String, dynamic>{
+          final data = <String, dynamic>{
             'title': _titleController.text,
             'content': _contentController.text,
             'tags': _tagIds,
             'id': _noteId,
             'remoteId': _remoteId,
           };
-          Navigator.pop(context, result);
+          Navigator.pop(context, data);
         } else {
           Navigator.pop(context, null);
         }
-        return false;
       },
       child: Scaffold(
       appBar: AppBar(

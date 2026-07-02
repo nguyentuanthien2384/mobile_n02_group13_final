@@ -127,21 +127,22 @@ class _TodoListScreenState extends State<TodoListScreen> {
     }
     _ensureSub();
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         if (_dirty) {
-          final result = <String, dynamic>{
+          final data = <String, dynamic>{
             'title': _title.text,
             'content': _toJson(),
             'tags': _tagIds,
             'id': _noteId,
             'remoteId': _remoteId,
           };
-          Navigator.pop(context, result);
+          Navigator.pop(context, data);
         } else {
           Navigator.pop(context, null);
         }
-        return false;
       },
       child: Scaffold(
         appBar: AppBar(

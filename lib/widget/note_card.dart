@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'package:todoapp/provider/tag_provider.dart';
 
 class NoteCard extends StatefulWidget {
-  NoteCard({
+  const NoteCard({
     super.key,
     required this.note,
     required this.onTap,
@@ -51,7 +51,7 @@ class _NoteCardState extends State<NoteCard> {
     final theme = Theme.of(context);
     final cardColor = widget.note.color != 0
         ? Color(widget.note.color)
-        : theme.colorScheme.surfaceVariant;
+        : theme.colorScheme.surfaceContainerHighest;
     final textColor = widget.note.color != 0
         ? (ThemeData.estimateBrightnessForColor(Color(widget.note.color)) == Brightness.dark
             ? Colors.white
@@ -130,7 +130,7 @@ class _NoteCardState extends State<NoteCard> {
                   style: theme.textTheme.bodySmall!.copyWith(
                       fontStyle: FontStyle.italic,
                       fontWeight: FontWeight.w500,
-                      color: widget.note.color != 0 ? textColor?.withOpacity(0.7) : theme.colorScheme.outline),
+                      color: widget.note.color != 0 ? textColor?.withValues(alpha: 0.7) : theme.colorScheme.outline),
                 ),
               ),
             ],

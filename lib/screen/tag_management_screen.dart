@@ -53,7 +53,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
     final tag = Tag(id: tagId, name: name, createdAt: createdAt);
     Provider.of<TagProvider>(context, listen: false).addTag(tag);
     final remoteId = await TagSyncService.pushAdded(db, tag);
-    if (remoteId != null) {
+    if (remoteId != null && mounted) {
       Provider.of<TagProvider>(context, listen: false).setTagRemoteId(tag.id, remoteId);
     }
   }
@@ -83,6 +83,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
     if (newName.isEmpty || newName == tag.name) return;
     final updated = tag.copyWith(name: newName);
     await TagDatabase.updateTag(db, updated);
+    if (!mounted) return;
     Provider.of<TagProvider>(context, listen: false).updateTag(updated);
     await TagSyncService.pushUpdated(updated);
   }
@@ -103,6 +104,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
     );
     if (confirmed != true) return;
 
+    if (!mounted) return;
     final noteProvider = Provider.of<NoteProvider>(context, listen: false);
     final tagProvider = Provider.of<TagProvider>(context, listen: false);
     final affectedNoteIds = List<int>.from(tag.noteIds);
@@ -152,7 +154,7 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
               final tag = tags[index];
               final noteCount = tag.noteIds.length;
               return Material(
-                color: theme.colorScheme.surfaceVariant,
+                color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(14),
                 child: ListTile(
                   title: Text(tag.name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),

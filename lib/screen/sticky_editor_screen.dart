@@ -30,11 +30,6 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
   String? _imagePath;
   Database? _db;
 
-  String get _typeTitle => _type == 'reminder'
-      ? 'Reminder'
-      : _type == 'shopping'
-          ? 'Shopping'
-          : 'Note';
 
   @override
   void initState() {
@@ -86,7 +81,7 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
         content: _body.text.trim(),
         createdAt: now,
         editedAt: now,
-        color: _color.value,
+        color: _color.toARGB32(),
         noteType: _type,
         price: _type == 'shopping' ? _price.text.trim() : null,
         imagePath: _type == 'note' ? _imagePath : null,
@@ -97,7 +92,7 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
         title: title,
         content: _body.text.trim(),
         editedAt: now,
-        color: _color.value,
+        color: _color.toARGB32(),
         noteType: _type,
         price: _type == 'shopping' ? _price.text.trim() : null,
         imagePath: _type == 'note' ? _imagePath : null,
@@ -234,7 +229,7 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
         decoration: BoxDecoration(
           color: _color,
           borderRadius: BorderRadius.circular(8),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 8, offset: const Offset(2, 5))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(2, 5))],
         ),
         child: Column(
           children: [
@@ -285,9 +280,9 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
                   color: c,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: _color.value == c.value ? Colors.white : Colors.transparent, width: 2),
+                    color: _color.toARGB32() == c.toARGB32() ? Colors.white : Colors.transparent, width: 2),
                 ),
-                child: _color.value == c.value
+                child: _color.toARGB32() == c.toARGB32()
                     ? const Icon(Icons.check, size: 16, color: Colors.white)
                     : null,
               ),

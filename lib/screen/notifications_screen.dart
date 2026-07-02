@@ -135,10 +135,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               itemBuilder: (context, i) {
                 final n = items[i];
                 return Container(
-                  color: n.read ? null : theme.colorScheme.primaryContainer.withOpacity(0.18),
+                  color: n.read ? null : theme.colorScheme.primaryContainer.withValues(alpha: 0.18),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: _colorFor(n.type, theme).withOpacity(0.15),
+                      backgroundColor: _colorFor(n.type, theme).withValues(alpha: 0.15),
                       child: Icon(_iconFor(n.type), color: _colorFor(n.type, theme), size: 20),
                     ),
                     title: Text(n.message, maxLines: 2, overflow: TextOverflow.ellipsis),

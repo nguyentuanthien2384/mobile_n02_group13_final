@@ -11,7 +11,6 @@ import 'package:todoapp/class/tag.dart';
 import 'package:todoapp/database/tag_database.dart';
 import 'package:todoapp/helper/note_text.dart';
 import 'package:todoapp/services/notification_service.dart';
-import 'package:share_plus/share_plus.dart';
 import 'dart:convert';
 import 'package:todoapp/class/folder.dart';
 import 'package:todoapp/database/folder_database.dart';
@@ -21,7 +20,7 @@ import 'package:todoapp/screen/share_dialog.dart';
 enum NoteSortMode { editedDesc, editedAsc, titleAsc, createdDesc }
 
 class NoteList extends StatefulWidget {
-  NoteList({super.key, this.db, this.searchQuery = '', this.onDelete, this.filterTagId, this.tagFilterBar, this.sortMode = NoteSortMode.editedDesc});
+  const NoteList({super.key, this.db, this.searchQuery = '', this.onDelete, this.filterTagId, this.tagFilterBar, this.sortMode = NoteSortMode.editedDesc});
 
   final Database? db;
   final String searchQuery;
@@ -74,22 +73,6 @@ class _NoteListState extends State<NoteList> {
       case NoteSortMode.createdDesc:
         return b.createdAt.compareTo(a.createdAt);
     }
-  }
-
-  Future<void> _shareNote(Note note) async {
-    final text = noteToShareText(note);
-    if (text.trim().isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nothing to share')),
-        );
-      }
-      return;
-    }
-    final title = note.title;
-    await SharePlus.instance.share(
-      ShareParams(text: text, subject: (title != null && title.isNotEmpty) ? title : null),
-    );
   }
 
   Future<void> _setReminder(Note note) async {
@@ -325,10 +308,12 @@ class _NoteListState extends State<NoteList> {
     if (db == null) return;
     if (attach) {
       await TagDatabase.attachTagToNote(db, note.id, tag.id);
+      if (!mounted) return;
       Provider.of<NoteProvider>(context, listen: false).addTagToNote(note.id, tag.id);
       Provider.of<TagProvider>(context, listen: false).attachNote(tag.id, note.id);
     } else {
       await TagDatabase.detachTagFromNote(db, note.id, tag.id);
+      if (!mounted) return;
       Provider.of<NoteProvider>(context, listen: false).removeTagFromNote(note.id, tag.id);
       Provider.of<TagProvider>(context, listen: false).detachNote(tag.id, note.id);
     }
@@ -416,30 +401,6 @@ class _NoteListState extends State<NoteList> {
         );
       },
     );
-  }
-
-  List<Widget> _buildTagChipWidgets(Note note) {
-    if (note.tagIds.isEmpty) return const [];
-    final tagProvider = Provider.of<TagProvider>(context, listen: false);
-    final chips = note.tagIds
-        .map((id) => tagProvider.getById(id)?.name)
-        .whereType<String>()
-        .where((name) => name.trim().isNotEmpty)
-        .map(
-          (name) => Chip(
-            label: Text(name, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11)),
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-            backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-          ),
-        )
-        .toList();
-    if (chips.isEmpty) return const [];
-    return [
-      const SizedBox(height: 4),
-      Wrap(spacing: 6, runSpacing: 4, children: chips),
-    ];
   }
 
   List<Widget> _buildTagChipWidgetsForPinned(Note note) {
@@ -554,7 +515,7 @@ class _NoteListState extends State<NoteList> {
                   ),
                   const Spacer(),
                   Text(
-                    '${totalCount} note${totalCount == 1 ? '' : 's'}',
+                    '$totalCount note${totalCount == 1 ? '' : 's'}',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                           fontWeight: FontWeight.w500,
                           color: Theme.of(context).colorScheme.outline,
@@ -600,12 +561,13 @@ class _NoteListState extends State<NoteList> {
                         await NoteDatabase.updateNote(_db!, edited);
                         await NoteSyncService.pushUpdated(edited);
                       }
+                      if (!mounted) return;
                       Provider.of<NoteProvider>(context, listen: false).updateNote(edited);
                     },
                     child: SizedBox(
                       width: 160,
                       child: Card(
-                        color: note.color != 0 ? Color(note.color) : Theme.of(context).colorScheme.surfaceVariant,
+                        color: note.color != 0 ? Color(note.color) : Theme.of(context).colorScheme.surfaceContainerHighest,
                         elevation: 3,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         child: ClipRect(
@@ -645,6 +607,7 @@ class _NoteListState extends State<NoteList> {
                                             await NoteDatabase.updateNote(_db!, updated);
                                             await NoteSyncService.pushUpdated(updated);
                                           }
+                                          if (!mounted) return;
                                           Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
                                           break;
                                         case 'labels':
@@ -815,6 +778,7 @@ class _NoteListState extends State<NoteList> {
                       isFavorite: note.isFavorite,
                     );
                     if (_db != null) await NoteDatabase.updateNote(_db!, edited);
+                    if (!mounted) return;
                     Provider.of<NoteProvider>(context, listen: false).updateNote(edited);
                   },
                   onTogglePin: (bool pinned) async {
@@ -836,6 +800,7 @@ class _NoteListState extends State<NoteList> {
                       await NoteDatabase.updateNote(_db!, updated);
                       await NoteSyncService.pushUpdated(updated);
                     }
+                    if (!mounted) return;
                     Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
                   },
                   onManageLabels: _openLabelSelector,

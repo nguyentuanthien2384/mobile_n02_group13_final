@@ -173,7 +173,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                       hintStyle: const TextStyle(fontSize: 13),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       filled: true,
-                      fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                      fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
                         borderSide: BorderSide.none,
