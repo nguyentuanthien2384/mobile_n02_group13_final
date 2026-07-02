@@ -8,8 +8,26 @@ import 'package:todoapp/class/note.dart';
 import 'package:todoapp/provider/tag_provider.dart';
 import 'package:todoapp/provider/theme_provider.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  Database? _db;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDb();
+  }
+
+  Future<void> _initDb() async {
+    final db = await DatabaseHelper.database();
+    if (mounted) setState(() => _db = db);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,8 +37,6 @@ class ProfileScreen extends StatelessWidget {
     final photo = user?.photoURL;
     final name = user?.displayName ?? 'User';
     final email = user?.email ?? '';
-    final args = ModalRoute.of(context)?.settings.arguments as Map?;
-    final Database? db = args != null ? args['db'] as Database? : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -83,11 +99,11 @@ class ProfileScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: db == null
-                    ? null
-                    : () {
-                        Navigator.pushNamed(context, '/tags', arguments: {'db': db});
-                      },
+                onPressed: () async {
+                  final db = _db ?? await DatabaseHelper.database();
+                  if (!mounted) return;
+                  Navigator.pushNamed(context, '/tags', arguments: {'db': db});
+                },
                 child: const Text('Manage tags'),
               ),
             ),
@@ -131,5 +147,3 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 }
-
-

@@ -60,7 +60,7 @@ class _SharedNotesScreenState extends State<SharedNotesScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.people_outline, size: 80, color: Colors.grey.withOpacity(0.5)),
+                      Icon(Icons.people_outline, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
                       const SizedBox(height: 16),
                       const Text(
                         'Chưa có ghi chú nào được chia sẻ với bạn',
@@ -81,7 +81,7 @@ class _SharedNotesScreenState extends State<SharedNotesScreen> {
                         if (n.isChecklist) {
                           await Navigator.pushNamed(
                             context,
-                            '/checklist_detail',
+                            '/todolist',
                             arguments: {
                               'id': n.id,
                               'title': n.title,
@@ -94,7 +94,7 @@ class _SharedNotesScreenState extends State<SharedNotesScreen> {
                         } else {
                           await Navigator.pushNamed(
                             context,
-                            '/rich_detail',
+                            '/detail',
                             arguments: {
                               'id': n.id,
                               'title': n.title,

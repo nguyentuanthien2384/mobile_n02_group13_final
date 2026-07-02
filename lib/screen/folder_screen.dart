@@ -6,7 +6,6 @@ import 'package:todoapp/provider/folder_provider.dart';
 import 'package:todoapp/helper/database.dart';
 import 'package:todoapp/database/folder_database.dart';
 import 'package:todoapp/database/note_database.dart';
-import 'package:todoapp/screen/todo_list_screen.dart';
 import 'package:todoapp/widget/note_card.dart';
 import 'package:todoapp/sync/note_sync.dart';
 import 'package:todoapp/services/folder_api_service.dart';
@@ -95,7 +94,7 @@ class _FolderScreenState extends State<FolderScreen> {
                     decoration: InputDecoration(
                       hintText: 'Tên thư mục',
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -125,7 +124,7 @@ class _FolderScreenState extends State<FolderScreen> {
                                 ? Border.all(color: Colors.white, width: 3)
                                 : null,
                             boxShadow: isSelected
-                                ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4)]
+                                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4)]
                                 : null,
                           ),
                         ),
@@ -267,7 +266,7 @@ class _FolderScreenState extends State<FolderScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.folder_open_outlined, size: 80, color: Colors.grey.withOpacity(0.5)),
+            Icon(Icons.folder_open_outlined, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             const Text(
               'Chưa có thư mục nào',
@@ -317,7 +316,7 @@ class _FolderScreenState extends State<FolderScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: folderColor.withOpacity(0.15),
+                      color: folderColor.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.folder, color: folderColor, size: 28),
@@ -357,7 +356,7 @@ class _FolderScreenState extends State<FolderScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.sticky_note_2_outlined, size: 80, color: Colors.grey.withOpacity(0.5)),
+            Icon(Icons.sticky_note_2_outlined, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             const Text(
               'Không có ghi chú nào trong thư mục này',
@@ -380,7 +379,7 @@ class _FolderScreenState extends State<FolderScreen> {
             if (n.isChecklist) {
               await Navigator.pushNamed(
                 context,
-                '/checklist_detail',
+                '/todolist',
                 arguments: {
                   'id': n.id,
                   'title': n.title,
@@ -392,7 +391,7 @@ class _FolderScreenState extends State<FolderScreen> {
             } else {
               await Navigator.pushNamed(
                 context,
-                '/rich_detail',
+                '/detail',
                 arguments: {
                   'id': n.id,
                   'title': n.title,

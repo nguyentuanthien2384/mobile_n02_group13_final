@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/widget/note_card.dart';
 import 'package:todoapp/helper/database.dart';
@@ -55,7 +54,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.star_border_rounded, size: 80, color: Colors.grey.withOpacity(0.5)),
+                      Icon(Icons.star_border_rounded, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
                       const SizedBox(height: 16),
                       const Text(
                         'Chưa có ghi chú yêu thích nào',
@@ -76,7 +75,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         if (n.isChecklist) {
                           await Navigator.pushNamed(
                             context,
-                            '/checklist_detail',
+                            '/todolist',
                             arguments: {
                               'id': n.id,
                               'title': n.title,
@@ -88,7 +87,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         } else {
                           await Navigator.pushNamed(
                             context,
-                            '/rich_detail',
+                            '/detail',
                             arguments: {
                               'id': n.id,
                               'title': n.title,
