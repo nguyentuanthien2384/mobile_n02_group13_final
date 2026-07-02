@@ -65,6 +65,36 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
     } catch (_) {}
   }
 
+  Future<void> _delete() async {
+    final db = _db;
+    final note = widget.note;
+    if (db == null || note == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Xóa ghi chú?'),
+        content: Text(
+          (note.title ?? '').trim().isEmpty
+              ? 'Ghi chú này sẽ được chuyển vào thùng rác.'
+              : '"${note.title}" sẽ được chuyển vào thùng rác.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await NoteDatabase.softDelete(db, note.id);
+    final notes = await NoteDatabase.getNotes(db);
+    if (!mounted) return;
+    Provider.of<NoteProvider>(context, listen: false).setNotes(notes);
+    Navigator.pop(context, true);
+  }
+
   Future<void> _save() async {
     final db = _db;
     if (db == null) return;
@@ -116,6 +146,12 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
         elevation: 0,
         leading: const BackButton(color: Colors.black),
         actions: [
+          if (widget.note != null)
+            IconButton(
+              onPressed: _delete,
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              tooltip: 'Xóa ghi chú',
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: TextButton(
@@ -146,6 +182,8 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: TextField(
                   controller: _title,
+                  autofocus: widget.note == null,
+                  textInputAction: TextInputAction.next,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
                   decoration: const InputDecoration(
@@ -196,6 +234,7 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
                   ],
                   TextField(
                     controller: _body,
+                    autofocus: widget.note != null,
                     maxLines: 10,
                     minLines: 6,
                     style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
@@ -248,6 +287,7 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
               ),
             TextField(
               controller: _body,
+              autofocus: widget.note != null && _type != 'shopping',
               textAlign: TextAlign.center,
               maxLines: 6,
               minLines: 3,
