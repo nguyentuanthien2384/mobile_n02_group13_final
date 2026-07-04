@@ -291,15 +291,9 @@ class _NoteListState extends State<NoteList> {
   }
 
   Future<void> _openShareDialog(Note note) async {
-    if (note.remoteId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đang đồng bộ ghi chú... Vui lòng thử lại sau.')),
-      );
-      return;
-    }
     showDialog(
       context: context,
-      builder: (context) => ShareDialog(noteRemoteId: note.remoteId!),
+      builder: (context) => ShareDialog(noteRemoteId: note.remoteId, note: note),
     );
   }
 

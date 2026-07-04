@@ -1,12 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/database/note_database.dart';
 import 'package:todoapp/helper/database.dart';
+import 'package:todoapp/helper/vietnamese_telex.dart';
+import 'package:todoapp/screen/share_dialog.dart';
 import 'package:todoapp/theme/note_palette.dart';
 
 /// Trình soạn ghi chú nền tối, có bảng chọn màu – giống thiết kế mẫu.
@@ -14,8 +18,14 @@ import 'package:todoapp/theme/note_palette.dart';
 class StickyEditorScreen extends StatefulWidget {
   final Note? note; // null = tạo mới
   final String noteType; // 'note' | 'reminder' | 'shopping'
+  final int? folderId; // nếu != null: ghi chú mới sẽ được lưu vào thư mục này
 
-  const StickyEditorScreen({super.key, this.note, this.noteType = 'note'});
+  const StickyEditorScreen({
+    super.key,
+    this.note,
+    this.noteType = 'note',
+    this.folderId,
+  });
 
   @override
   State<StickyEditorScreen> createState() => _StickyEditorScreenState();
@@ -29,12 +39,14 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
   late Color _color;
   String? _imagePath;
   Database? _db;
+  int? _noteId;
 
 
   @override
   void initState() {
     super.initState();
     _type = widget.note?.noteType ?? widget.noteType;
+    _noteId = widget.note?.id;
     _title.text = widget.note?.title ?? '';
     _body.text = plainTextFromContent(widget.note?.content);
     _price.text = widget.note?.price ?? '';
@@ -59,10 +71,93 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
   }
 
   Future<void> _pickImage() async {
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Chọn từ thư viện ảnh'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open_outlined),
+              title: const Text('Chọn từ tệp / Download / Máy tính'),
+              onTap: () => Navigator.pop(ctx, 'files'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    String? sourcePath;
     try {
-      final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
-      if (picked != null) setState(() => _imagePath = picked.path);
-    } catch (_) {}
+      if (source == 'gallery') {
+        final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+        sourcePath = picked?.path;
+      } else {
+        final result = await FilePicker.platform.pickFiles(type: FileType.image);
+        sourcePath = result?.files.single.path;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không mở được trình chọn ảnh: $e')),
+        );
+      }
+      return;
+    }
+
+    if (sourcePath == null) return; // người dùng hủy chọn
+
+    // Sao chép ảnh vào thư mục dữ liệu của app để ảnh tồn tại lâu dài
+    // (đường dẫn gốc từ cache/gallery có thể bị xóa sau này).
+    try {
+      final saved = await _persistImage(sourcePath);
+      if (mounted) setState(() => _imagePath = saved);
+    } catch (_) {
+      if (mounted) setState(() => _imagePath = sourcePath);
+    }
+  }
+
+  Future<String> _persistImage(String sourcePath) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final imgDir = Directory('${appDir.path}/note_images');
+    if (!await imgDir.exists()) {
+      await imgDir.create(recursive: true);
+    }
+    final ext = sourcePath.contains('.') ? sourcePath.split('.').last : 'jpg';
+    final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final destPath = '${imgDir.path}/$fileName';
+    await File(sourcePath).copy(destPath);
+    return destPath;
+  }
+
+  void _removeImage() {
+    setState(() => _imagePath = null);
+  }
+
+  Future<void> _share() async {
+    final note = await _persist();
+    if (note == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Hãy nhập nội dung trước khi chia sẻ')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => ShareDialog(noteRemoteId: note.remoteId, note: note),
+    );
   }
 
   Future<void> _delete() async {
@@ -95,16 +190,15 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
     Navigator.pop(context, true);
   }
 
-  Future<void> _save() async {
+  /// Lưu ghi chú vào DB (tạo mới hoặc cập nhật) và trả về Note đã lưu.
+  /// Trả về null nếu ghi chú trống. Không tự đóng màn hình.
+  Future<Note?> _persist() async {
     final db = _db;
-    if (db == null) return;
+    if (db == null) return null;
     final title = _title.text.trim();
-    if (title.isEmpty && _body.text.trim().isEmpty) {
-      Navigator.pop(context, false);
-      return;
-    }
+    if (title.isEmpty && _body.text.trim().isEmpty) return null;
     final now = DateTime.now();
-    if (widget.note == null) {
+    if (_noteId == null) {
       final note = Note(
         id: 0,
         title: title,
@@ -115,26 +209,40 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
         noteType: _type,
         price: _type == 'shopping' ? _price.text.trim() : null,
         imagePath: _type == 'note' ? _imagePath : null,
+        folderId: widget.folderId,
       );
-      await NoteDatabase.insertNote(db, note);
+      _noteId = await NoteDatabase.insertNote(db, note);
     } else {
-      final updated = widget.note!.copyWith(
+      final existing = await NoteDatabase.getNote(db, _noteId!);
+      final updated = existing.copyWith(
         title: title,
         content: _body.text.trim(),
         editedAt: now,
         color: _color.toARGB32(),
         noteType: _type,
         price: _type == 'shopping' ? _price.text.trim() : null,
-        imagePath: _type == 'note' ? _imagePath : null,
       );
+      // copyWith giữ ảnh cũ khi truyền null, nên gán trực tiếp để có thể GỠ ảnh.
+      updated.imagePath = _type == 'note' ? _imagePath : null;
       await NoteDatabase.updateNote(db, updated);
     }
+    final saved = await NoteDatabase.getNote(db, _noteId!);
     // Đồng bộ lại provider để các màn khác cập nhật.
     final notes = await NoteDatabase.getNotes(db);
     if (mounted) {
       Provider.of<NoteProvider>(context, listen: false).setNotes(notes);
-      Navigator.pop(context, true);
     }
+    return saved;
+  }
+
+  Future<void> _save() async {
+    if (_db == null) return;
+    if (_title.text.trim().isEmpty && _body.text.trim().isEmpty) {
+      Navigator.pop(context, false);
+      return;
+    }
+    await _persist();
+    if (mounted) Navigator.pop(context, true);
   }
 
   @override
@@ -146,6 +254,30 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
         elevation: 0,
         leading: const BackButton(color: Colors.black),
         actions: [
+          Center(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: vietnameseInputEnabled,
+              builder: (context, enabled, _) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: TextButton(
+                  onPressed: () => vietnameseInputEnabled.value = !enabled,
+                  style: TextButton.styleFrom(
+                    backgroundColor: enabled ? Colors.black : Colors.grey.shade300,
+                    foregroundColor: enabled ? Colors.white : Colors.black54,
+                    minimumSize: const Size(44, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  child: Text(enabled ? 'VI' : 'EN', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _share,
+            icon: const Icon(Icons.ios_share, color: Colors.black),
+            tooltip: 'Chia sẻ ra ứng dụng khác',
+          ),
           if (widget.note != null)
             IconButton(
               onPressed: _delete,
@@ -183,6 +315,10 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
                 child: TextField(
                   controller: _title,
                   autofocus: widget.note == null,
+                  inputFormatters: const [VietnameseTelexFormatter()],
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.visiblePassword,
                   textInputAction: TextInputAction.next,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
@@ -225,16 +361,41 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
               child: Column(
                 children: [
                   if (_imagePath != null && _imagePath!.isNotEmpty) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.file(File(_imagePath!), height: 160, width: double.infinity, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(File(_imagePath!), height: 160, width: double.infinity, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                        ),
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Material(
+                            color: Colors.black54,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _removeImage,
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(Icons.close, color: Colors.white, size: 18),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                   ],
                   TextField(
                     controller: _body,
                     autofocus: widget.note != null,
+                    inputFormatters: const [VietnameseTelexFormatter()],
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    keyboardType: TextInputType.visiblePassword,
+                    textInputAction: TextInputAction.newline,
                     maxLines: 10,
                     minLines: 6,
                     style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
@@ -288,6 +449,11 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
             TextField(
               controller: _body,
               autofocus: widget.note != null && _type != 'shopping',
+              inputFormatters: const [VietnameseTelexFormatter()],
+              autocorrect: false,
+              enableSuggestions: false,
+              keyboardType: TextInputType.visiblePassword,
+              textInputAction: TextInputAction.newline,
               textAlign: TextAlign.center,
               maxLines: 6,
               minLines: 3,
@@ -337,15 +503,24 @@ class _StickyEditorScreenState extends State<StickyEditorScreen> {
   }
 
   Widget _buildAddImage() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 16),
-        child: TextButton.icon(
-          onPressed: _pickImage,
-          icon: const Icon(Icons.image_outlined, color: Colors.white),
-          label: const Text('Add image', style: TextStyle(color: Colors.white)),
-        ),
+    final hasImage = _imagePath != null && _imagePath!.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(left: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          TextButton.icon(
+            onPressed: _pickImage,
+            icon: Icon(hasImage ? Icons.swap_horiz : Icons.image_outlined, color: Colors.white),
+            label: Text(hasImage ? 'Đổi ảnh' : 'Thêm ảnh', style: const TextStyle(color: Colors.white)),
+          ),
+          if (hasImage)
+            TextButton.icon(
+              onPressed: _removeImage,
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              label: const Text('Gỡ ảnh', style: TextStyle(color: Colors.redAccent)),
+            ),
+        ],
       ),
     );
   }

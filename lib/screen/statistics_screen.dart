@@ -1,15 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:todoapp/class/note.dart';
+import 'package:todoapp/database/note_database.dart';
+import 'package:todoapp/helper/database.dart';
 import 'package:todoapp/provider/tag_provider.dart';
 import 'package:todoapp/helper/note_text.dart';
 
-class StatisticsScreen extends StatelessWidget {
+class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
+
+  @override
+  State<StatisticsScreen> createState() => _StatisticsScreenState();
+}
+
+class _StatisticsScreenState extends State<StatisticsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Nạp lại từ DB mỗi khi mở màn thống kê để phản ánh mọi thay đổi
+    // (thêm/xóa/sửa ghi chú, checklist) từ bất kỳ màn nào khác.
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final db = await DatabaseHelper.database();
+      final notes = await NoteDatabase.getNotes(db);
+      if (!mounted) return;
+      Provider.of<NoteProvider>(context, listen: false).setNotes(notes);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // watch → tự cập nhật ngay khi NoteProvider/TagProvider thay đổi.
     final notes = context.watch<NoteProvider>().notes;
     final tags = context.watch<TagProvider>().tags;
 
@@ -40,8 +65,18 @@ class StatisticsScreen extends StatelessWidget {
         backgroundColor: theme.colorScheme.primary,
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text('Statistics', style: TextStyle(color: Colors.white)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            tooltip: 'Làm mới',
+            onPressed: _refresh,
+          ),
+        ],
       ),
-      body: ListView(
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
           Text('Overview',
@@ -143,13 +178,15 @@ class StatisticsScreen extends StatelessWidget {
                 child: ListTile(
                   leading: const Icon(Icons.label),
                   title: Text(t.name),
-                  trailing: Text('${t.noteIds.length}',
+                  trailing: Text(
+                      '${notes.where((n) => n.tagIds.contains(t.id)).length}',
                       style: theme.textTheme.titleMedium),
                 ),
               ),
             ),
           ],
         ],
+      ),
       ),
     );
   }

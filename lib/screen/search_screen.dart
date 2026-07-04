@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/widget/note_list.dart';
 import 'package:todoapp/database/note_database.dart';
+import 'package:todoapp/helper/vietnamese_telex.dart';
 import 'package:todoapp/sync/note_sync.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -55,6 +56,10 @@ class _SearchScreenState extends State<SearchScreen> {
             child: TextField(
               controller: _searchController,
               autofocus: true,
+              inputFormatters: const [VietnameseTelexFormatter()],
+              autocorrect: false,
+              enableSuggestions: false,
+              keyboardType: TextInputType.visiblePassword,
               style: theme.textTheme.titleMedium!.copyWith(color: Colors.white),
               cursorColor: Colors.white,
               decoration: InputDecoration(

@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:todoapp/class/note.dart';
+import 'package:todoapp/database/note_database.dart';
+import 'package:todoapp/helper/database.dart';
+import 'package:todoapp/helper/share_helper.dart';
 import 'package:todoapp/services/note_api_service.dart';
+import 'package:todoapp/sync/note_sync.dart';
 
 class ShareDialog extends StatefulWidget {
-  final String noteRemoteId;
-  const ShareDialog({super.key, required this.noteRemoteId});
+  final String? noteRemoteId; // null nếu ghi chú chưa đồng bộ backend
+  final Note? note; // note cục bộ (để lưu collaborators + chia sẻ ngoài)
+  const ShareDialog({super.key, this.noteRemoteId, this.note});
 
   @override
   State<ShareDialog> createState() => _ShareDialogState();
@@ -16,45 +23,116 @@ class _ShareDialogState extends State<ShareDialog> {
   bool _isSharing = false;
   String? _publicLink;
   bool _isGeneratingLink = false;
+  late List<String> _sharedEmails;
+  String? _remoteId; // remoteId hiệu lực (có thể vừa đồng bộ xong)
+
+  @override
+  void initState() {
+    super.initState();
+    _sharedEmails = List<String>.from(widget.note?.collaborators ?? const []);
+    _remoteId = widget.noteRemoteId;
+  }
+
+  /// Đảm bảo ghi chú đã được đồng bộ lên máy chủ (có remoteId). Nếu chưa,
+  /// tự đẩy lên backend để lấy remoteId — điều kiện để người nhận xem được.
+  Future<String?> _ensureSynced() async {
+    if (_remoteId != null) return _remoteId;
+    final localNote = widget.note;
+    if (localNote == null || localNote.id <= 0) return null;
+    try {
+      final db = await DatabaseHelper.database();
+      final fresh = await NoteDatabase.getNote(db, localNote.id);
+      if (fresh.remoteId == null) {
+        await NoteSyncService.pushAdded(db, fresh); // gán remoteId vào DB + object
+      }
+      final after = await NoteDatabase.getNote(db, localNote.id);
+      _remoteId = after.remoteId;
+    } catch (_) {}
+    return _remoteId;
+  }
+
+  Future<void> _persistCollaborators() async {
+    final note = widget.note;
+    if (note == null || note.id <= 0) return;
+    try {
+      final db = await DatabaseHelper.database();
+      final current = await NoteDatabase.getNote(db, note.id);
+      final updated = current.copyWith(
+        collaborators: _sharedEmails,
+        editedAt: DateTime.now(),
+      );
+      await NoteDatabase.updateNote(db, updated);
+      if (mounted) {
+        Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
+      }
+      // Đẩy lên máy chủ để lịch sử chia sẻ tồn tại qua đăng nhập lại / thiết bị khác.
+      if (updated.remoteId != null) {
+        try {
+          await NoteApiService.updateNote(updated);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
 
   Future<void> _shareWithUser() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) return;
-
-    setState(() {
-      _isSharing = true;
-    });
-
-    try {
-      final res = await NoteApiService.shareNote(
-        remoteId: widget.noteRemoteId,
-        email: email,
-        permission: _permission,
+    if (!email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email không hợp lệ')),
       );
+      return;
+    }
 
-      if (res != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã chia sẻ thành công với $email')),
+    setState(() => _isSharing = true);
+
+    // 1) Ghi nhận cục bộ (hiển thị ở tab "Tôi đã chia sẻ" ngay cả khi offline).
+    if (widget.note != null && !_sharedEmails.contains(email)) {
+      _sharedEmails.add(email);
+      await _persistCollaborators();
+    }
+
+    // 2) Đồng bộ ghi chú lên máy chủ (nếu chưa) rồi gọi backend chia sẻ.
+    final remoteId = await _ensureSynced();
+    String message;
+    bool delivered = false;
+    if (remoteId == null) {
+      message =
+          'Đã lưu vào máy, nhưng chưa đồng bộ được lên máy chủ nên người nhận '
+          'chưa xem được. Kiểm tra bạn đã đăng nhập và máy chủ đang chạy.';
+    } else {
+      try {
+        final res = await NoteApiService.shareNote(
+          remoteId: remoteId,
+          email: email,
+          permission: _permission,
         );
-        _emailController.clear();
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không thể chia sẻ. Vui lòng kiểm tra email người nhận')),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã xảy ra lỗi khi chia sẻ')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSharing = false;
-        });
+        if (res != null) {
+          delivered = true;
+          message =
+              'Đã gửi tới $email. Người nhận đăng nhập rồi mở tab "Được chia sẻ với tôi" để xem.';
+        } else {
+          message =
+              'Chưa gửi được: người nhận cần đăng nhập ứng dụng ít nhất một lần '
+              '(để hệ thống nhận diện email), hoặc kiểm tra kết nối máy chủ.';
+        }
+      } catch (_) {
+        message = 'Lỗi kết nối máy chủ. Kiểm tra backend có đang chạy không.';
       }
     }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
+      );
+      if (delivered) _emailController.clear();
+      setState(() => _isSharing = false);
+    }
+  }
+
+  Future<void> _removeCollaborator(String email) async {
+    setState(() => _sharedEmails.remove(email));
+    await _persistCollaborators();
   }
 
   Future<void> _generatePublicLink() async {
@@ -63,8 +141,19 @@ class _ShareDialogState extends State<ShareDialog> {
     });
 
     try {
+      final remoteId = await _ensureSynced();
+      if (remoteId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Chưa đồng bộ được ghi chú lên máy chủ. Kiểm tra đăng nhập và máy chủ.')),
+          );
+        }
+        return;
+      }
       final res = await NoteApiService.sharePublic(
-        remoteId: widget.noteRemoteId,
+        remoteId: remoteId,
         permission: 'view',
       );
 
@@ -72,6 +161,7 @@ class _ShareDialogState extends State<ShareDialog> {
         setState(() {
           _publicLink = res['shareUrl'];
         });
+        if (widget.note != null) await markNoteShared(context, widget.note!);
       }
     } catch (_) {} finally {
       if (mounted) {
@@ -163,55 +253,100 @@ class _ShareDialogState extends State<ShareDialog> {
                 ),
               ),
             ),
-            const Divider(height: 32),
-            const Text(
-              'Liên kết chia sẻ công khai:',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            if (_publicLink != null)
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _publicLink!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: Colors.blue),
+            if (_sharedEmails.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text(
+                'Đã chia sẻ với:',
+                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _sharedEmails
+                    .map((e) => Chip(
+                          label: Text(e, style: const TextStyle(fontSize: 12)),
+                          onDeleted: () => _removeCollaborator(e),
+                          deleteIcon: const Icon(Icons.close, size: 16),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ))
+                    .toList(),
+              ),
+            ],
+            if (widget.note != null || widget.noteRemoteId != null) ...[
+              const Divider(height: 32),
+              const Text(
+                'Liên kết chia sẻ công khai:',
+                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              if (_publicLink != null)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _publicLink!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: Colors.blue),
+                        ),
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 18),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: _publicLink!));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Đã sao chép liên kết vào bộ nhớ tạm')),
+                          );
+                        },
+                      )
+                    ],
+                  ),
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isGeneratingLink ? null : _generatePublicLink,
+                    icon: _isGeneratingLink
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.link),
+                    label: const Text('Tạo liên kết công khai'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.copy, size: 18),
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: _publicLink!));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Đã sao chép liên kết vào bộ nhớ tạm')),
-                        );
-                      },
-                    )
-                  ],
+                  ),
                 ),
-              )
-            else
+            ],
+            if (widget.note != null) ...[
+              const Divider(height: 32),
+              const Text(
+                'Chia sẻ ra ứng dụng khác:',
+                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isGeneratingLink ? null : _generatePublicLink,
-                  icon: _isGeneratingLink
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.link),
-                  label: const Text('Tạo liên kết công khai'),
-                  style: OutlinedButton.styleFrom(
+                child: ElevatedButton.icon(
+                  onPressed: () => shareNoteExternally(
+                    context,
+                    widget.note!,
+                    publicLink: _publicLink,
+                  ),
+                  icon: const Icon(Icons.ios_share),
+                  label: const Text('Chia sẻ (Zalo, Messenger, Gmail...)'),
+                  style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
+            ],
           ],
         ),
       ),

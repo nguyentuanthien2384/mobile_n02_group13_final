@@ -6,6 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:todoapp/sync/note_sync.dart';
 import 'package:todoapp/class/note.dart';
+import 'package:todoapp/database/note_database.dart';
+import 'package:todoapp/helper/database.dart';
+import 'package:todoapp/helper/vietnamese_telex.dart';
 import 'package:todoapp/screen/share_dialog.dart';
 import 'package:todoapp/screen/comments_sheet.dart';
 
@@ -25,7 +28,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
   Timer? _debounce;
   int? _noteId;
   String? _remoteId;
+  int? _folderId;
   bool _dirty = false;
+  bool _saving = false;
   bool _suppress = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _docSub;
   bool _initialized = false;
@@ -52,6 +57,34 @@ class _TodoListScreenState extends State<TodoListScreen> {
       _applyFromJson((data['content'] as String?) ?? '');
       setState(() {});
     });
+  }
+
+  void _addItem() {
+    _items.add(TextEditingController());
+    _checked.add(false);
+    _itemNodes.add(FocusNode());
+    _backspaceArmed.add(false);
+    _dirty = true;
+    _schedulePush();
+    setState(() {});
+    Future.delayed(const Duration(milliseconds: 10), () {
+      if (_itemNodes.isNotEmpty) _itemNodes.last.requestFocus();
+    });
+  }
+
+  void _removeItem(int index) {
+    if (_items.length == 1) {
+      _items[0].clear();
+      _checked[0] = false;
+    } else {
+      _items.removeAt(index).dispose();
+      _checked.removeAt(index);
+      _itemNodes.removeAt(index).dispose();
+      _backspaceArmed.removeAt(index);
+    }
+    _dirty = true;
+    _schedulePush();
+    setState(() {});
   }
 
   void _ensureFirstItemAndFocus() {
@@ -113,6 +146,78 @@ class _TodoListScreenState extends State<TodoListScreen> {
     });
   }
 
+  /// Lưu checklist vào cơ sở dữ liệu cục bộ (tạo mới nếu chưa có, cập nhật nếu đã có).
+  /// Trả về Note đã lưu, hoặc null nếu ghi chú trống.
+  Future<Note?> _save({bool showToast = true}) async {
+    if (_saving) return null;
+    _saving = true;
+    try {
+      final title = _title.text;
+      final content = _toJson();
+      final hasContent =
+          title.trim().isNotEmpty || _items.any((c) => c.text.trim().isNotEmpty);
+      final db = await DatabaseHelper.database();
+      Note note;
+      if (_noteId == null) {
+        if (!hasContent) {
+          if (showToast && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ghi chú trống, chưa thể lưu')),
+            );
+          }
+          return null;
+        }
+        final now = DateTime.now();
+        final base = Note(
+          id: 0,
+          title: title,
+          content: content,
+          createdAt: now,
+          editedAt: now,
+          pinned: false,
+          isChecklist: true,
+          folderId: _folderId,
+          tagIds: _tagIds,
+        );
+        final id = await NoteDatabase.insertNote(db, base);
+        _noteId = id;
+      } else {
+        final existing = await NoteDatabase.getNote(db, _noteId!);
+        final updated = existing.copyWith(
+          title: title,
+          content: content,
+          isChecklist: true,
+          editedAt: DateTime.now(),
+        );
+        await NoteDatabase.updateNote(db, updated);
+      }
+      _dirty = false;
+
+      note = await NoteDatabase.getNote(db, _noteId!);
+      try {
+        if (note.remoteId == null) {
+          await NoteSyncService.pushAdded(db, note);
+          note = await NoteDatabase.getNote(db, _noteId!);
+        } else {
+          await NoteSyncService.pushUpdated(note);
+        }
+      } catch (_) {}
+      _remoteId = note.remoteId ?? _remoteId;
+
+      if (mounted) {
+        setState(() {});
+        if (showToast) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã lưu ghi chú')),
+          );
+        }
+      }
+      return note;
+    } finally {
+      _saving = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -122,6 +227,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
       _applyFromJson((args['content'] as String?) ?? '');
       _noteId = args['id'] as int?;
       _remoteId = args['remoteId'] as String?;
+      _folderId = args['folderId'] as int?;
       _tagIds = List<int>.from((args['tags'] as List?) ?? const []);
       _initialized = true;
     }
@@ -129,19 +235,13 @@ class _TodoListScreenState extends State<TodoListScreen> {
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         if (_dirty) {
-          final data = <String, dynamic>{
-            'title': _title.text,
-            'content': _toJson(),
-            'tags': _tagIds,
-            'id': _noteId,
-            'remoteId': _remoteId,
-          };
-          Navigator.pop(context, data);
-        } else {
-          Navigator.pop(context, null);
+          await _save(showToast: false);
+        }
+        if (mounted) {
+          Navigator.pop(context, {'saved': true, 'id': _noteId});
         }
       },
       child: Scaffold(
@@ -150,17 +250,32 @@ class _TodoListScreenState extends State<TodoListScreen> {
           iconTheme: const IconThemeData(color: Colors.white),
           title: const Text('Checklist', style: TextStyle(color: Colors.white)),
           actions: [
-            if (_remoteId != null) ...[
-              IconButton(
-                icon: const Icon(Icons.share_outlined, color: Colors.white),
-                tooltip: 'Chia sẻ',
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => ShareDialog(noteRemoteId: _remoteId!),
-                  );
-                },
-              ),
+            IconButton(
+              icon: const Icon(Icons.save_outlined, color: Colors.white),
+              tooltip: 'Lưu',
+              onPressed: () => _save(),
+            ),
+            IconButton(
+              icon: const Icon(Icons.share_outlined, color: Colors.white),
+              tooltip: 'Chia sẻ',
+              onPressed: () async {
+                final note = await _save(showToast: false);
+                if (note == null) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Hãy nhập nội dung trước khi chia sẻ')),
+                    );
+                  }
+                  return;
+                }
+                if (!mounted) return;
+                showDialog(
+                  context: context,
+                  builder: (_) => ShareDialog(noteRemoteId: note.remoteId, note: note),
+                );
+              },
+            ),
+            if (_remoteId != null)
               IconButton(
                 icon: const Icon(Icons.comment_outlined, color: Colors.white),
                 tooltip: 'Bình luận',
@@ -175,7 +290,6 @@ class _TodoListScreenState extends State<TodoListScreen> {
                   );
                 },
               ),
-            ],
           ],
         ),
         body: Padding(
@@ -184,6 +298,10 @@ class _TodoListScreenState extends State<TodoListScreen> {
             children: [
               TextField(
                 controller: _title,
+                inputFormatters: const [VietnameseTelexFormatter()],
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.visiblePassword,
                 decoration: const InputDecoration(border: InputBorder.none, hintText: 'Title'),
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, fontSize: 20),
                 autofocus: _title.text.isEmpty,
@@ -197,8 +315,34 @@ class _TodoListScreenState extends State<TodoListScreen> {
               const SizedBox(height: 8),
               Expanded(
                 child: ListView.builder(
-                  itemCount: _items.length,
+                  itemCount: _items.length + 1,
                   itemBuilder: (context, index) {
+                    if (index == _items.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6, left: 4),
+                        child: InkWell(
+                          onTap: _addItem,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                            child: Row(
+                              children: [
+                                Icon(Icons.add, color: theme.colorScheme.primary),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'Thêm mục',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -245,6 +389,10 @@ class _TodoListScreenState extends State<TodoListScreen> {
                             },
                             child: TextField(
                               controller: _items[index],
+                              inputFormatters: const [VietnameseTelexFormatter()],
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              keyboardType: TextInputType.visiblePassword,
                               decoration: const InputDecoration(border: InputBorder.none, hintText: 'List item'),
                               maxLines: 1,
                               textInputAction: TextInputAction.next,
@@ -265,16 +413,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
-                          onPressed: () {
-                            if (_items.length == 1) {
-                              _items[0].clear(); _checked[0] = false;
-                            } else {
-                              _items.removeAt(index); _checked.removeAt(index);
-                              _itemNodes.removeAt(index).dispose(); _backspaceArmed.removeAt(index);
-                            }
-                            _dirty = true; _schedulePush();
-                            setState(() {});
-                          },
+                          tooltip: 'Xóa mục',
+                          onPressed: () => _removeItem(index),
                         ),
                       ],
                     );

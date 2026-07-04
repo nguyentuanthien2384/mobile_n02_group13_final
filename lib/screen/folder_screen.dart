@@ -9,6 +9,8 @@ import 'package:todoapp/database/note_database.dart';
 import 'package:todoapp/widget/note_card.dart';
 import 'package:todoapp/sync/note_sync.dart';
 import 'package:todoapp/services/folder_api_service.dart';
+import 'package:todoapp/screen/sticky_editor_screen.dart';
+import 'package:todoapp/theme/note_palette.dart';
 
 class FolderScreen extends StatefulWidget {
   const FolderScreen({super.key});
@@ -63,6 +65,103 @@ class _FolderScreenState extends State<FolderScreen> {
         _isLoadingNotes = false;
       });
     }
+  }
+
+  /// Hiển thị menu chọn loại ghi chú (giống mục Ghi chú): thường / nâng cao / checklist.
+  void _createNoteInFolder(Folder folder) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.sticky_note_2_outlined),
+              title: const Text('Ghi chú thường'),
+              subtitle: const Text('Ghi chú dạng giấy nhớ, có ảnh'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _createPlainNoteInFolder(folder);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_note),
+              title: const Text('Ghi chú nâng cao'),
+              subtitle: const Text('Định dạng chữ, chèn ảnh, ghi âm giọng nói'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _createViaRouteInFolder('/detail', folder, isChecklist: false);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.checklist),
+              title: const Text('Checklist'),
+              subtitle: const Text('Danh sách công việc có ô đánh dấu'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _createViaRouteInFolder('/todolist', folder, isChecklist: true);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Ghi chú thường: mở trình soạn thảo giấy nhớ (tự lưu, kèm folderId).
+  Future<void> _createPlainNoteInFolder(Folder folder) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StickyEditorScreen(folderId: folder.id),
+      ),
+    );
+    if (changed == true && mounted) {
+      _loadNotesInFolder(folder);
+    }
+  }
+
+  /// Ghi chú nâng cao (/detail) hoặc checklist (/todolist) qua route,
+  /// đảm bảo ghi chú mới được gán vào thư mục hiện tại.
+  Future<void> _createViaRouteInFolder(
+    String route,
+    Folder folder, {
+    required bool isChecklist,
+  }) async {
+    final result = await Navigator.pushNamed(
+      context,
+      route,
+      arguments: {'title': '', 'content': '', 'folderId': folder.id},
+    ) as Map?;
+    if (result == null) {
+      if (mounted) _loadNotesInFolder(folder);
+      return;
+    }
+    // Màn checklist tự lưu vào DB (đã kèm folderId qua arguments) → chỉ nạp lại.
+    if (result['saved'] == true) {
+      if (mounted) _loadNotesInFolder(folder);
+      return;
+    }
+    // Màn ghi chú nâng cao trả về nội dung → tạo bản ghi mới kèm folderId.
+    final title = (result['title'] as String?) ?? '';
+    final content = (result['content'] as String?) ?? '';
+    if (title.trim().isEmpty && plainTextFromContent(content).isEmpty) {
+      if (mounted) _loadNotesInFolder(folder);
+      return;
+    }
+    final db = await DatabaseHelper.database();
+    final now = DateTime.now().toIso8601String();
+    final id = await NoteDatabase.rawInsertNote(db, [title, content, now, now]);
+    var newNote = await NoteDatabase.getNote(db, id);
+    newNote = newNote.copyWith(folderId: folder.id, isChecklist: isChecklist);
+    await NoteDatabase.updateNote(db, newNote);
+    try {
+      await NoteSyncService.pushAdded(db, newNote);
+    } catch (_) {}
+    if (mounted) _loadNotesInFolder(folder);
   }
 
   Future<void> _addFolder() async {
@@ -257,6 +356,15 @@ class _FolderScreenState extends State<FolderScreen> {
       body: _selectedFolder == null
           ? _buildFolderGrid(folderProvider.folders)
           : _buildFolderNotesView(),
+      floatingActionButton: _selectedFolder != null
+          ? FloatingActionButton.extended(
+              backgroundColor: Color(_selectedFolder!.color),
+              foregroundColor: Colors.white,
+              onPressed: () => _createNoteInFolder(_selectedFolder!),
+              icon: const Icon(Icons.add),
+              label: const Text('Thêm ghi chú'),
+            )
+          : null,
     );
   }
 
@@ -376,32 +484,34 @@ class _FolderScreenState extends State<FolderScreen> {
         return NoteCard(
           note: note,
           onTap: (n) async {
-            if (n.isChecklist) {
-              await Navigator.pushNamed(
-                context,
-                '/todolist',
-                arguments: {
-                  'id': n.id,
-                  'title': n.title,
-                  'content': n.content,
-                  'remoteId': n.remoteId,
-                  'tags': n.tagIds,
-                },
+            final result = await Navigator.pushNamed(
+              context,
+              n.isChecklist ? '/todolist' : '/detail',
+              arguments: {
+                'id': n.id,
+                'title': n.title,
+                'content': n.content,
+                'remoteId': n.remoteId,
+                'tags': n.tagIds,
+                'folderId': n.folderId,
+              },
+            ) as Map?;
+            // checklist tự lưu (cờ 'saved'); detail trả về map để lưu tại đây.
+            if (result != null && result['saved'] != true) {
+              final db = await DatabaseHelper.database();
+              final edited = n.copyWith(
+                title: (result['title'] as String?) ?? n.title,
+                content: (result['content'] as String?) ?? n.content,
+                editedAt: DateTime.now(),
               );
-            } else {
-              await Navigator.pushNamed(
-                context,
-                '/detail',
-                arguments: {
-                  'id': n.id,
-                  'title': n.title,
-                  'content': n.content,
-                  'remoteId': n.remoteId,
-                  'tags': n.tagIds,
-                },
-              );
+              await NoteDatabase.updateNote(db, edited);
+              try {
+                await NoteSyncService.pushUpdated(edited);
+              } catch (_) {}
             }
-            _loadNotesInFolder(_selectedFolder!);
+            if (mounted && _selectedFolder != null) {
+              _loadNotesInFolder(_selectedFolder!);
+            }
           },
           delete: (id) async {
             final db = await DatabaseHelper.database();

@@ -29,6 +29,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) setState(() => _db = db);
   }
 
+  /// Hỏi xác nhận trước khi đăng xuất; chỉ đăng xuất khi người dùng đồng ý.
+  Future<void> _confirmAndSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Đăng xuất'),
+        content: const Text('Bạn có chắc muốn đăng xuất khỏi tài khoản này không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Không'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Đăng xuất'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _signOut();
+  }
+
+  Future<void> _signOut() async {
+    // Xóa dữ liệu trong provider trước khi đăng xuất.
+    Provider.of<NoteProvider>(context, listen: false).clearNotes();
+    Provider.of<TagProvider>(context, listen: false).setTags([]);
+
+    // Xóa cache DB (sẽ nạp lại khi có người dùng khác đăng nhập).
+    await DatabaseHelper.clearCache();
+
+    // Đăng xuất Google + Firebase.
+    try { await GoogleSignIn().signOut(); } catch (_) {}
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/login');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -123,22 +162,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  // Clear providers before logout
-                  Provider.of<NoteProvider>(context, listen: false).clearNotes();
-                  Provider.of<TagProvider>(context, listen: false).setTags([]);
-                  
-                  // Clear database cache (will reload when new user logs in)
-                  await DatabaseHelper.clearCache();
-                  
-                  // Sign out
-                  try { await GoogleSignIn().signOut(); } catch (_) {}
-                  await FirebaseAuth.instance.signOut();
-                  if (!context.mounted) return;
-                  Navigator.pushReplacementNamed(context, '/login');
-                },
-                child: const Text('Sign out'),
+              child: ElevatedButton.icon(
+                onPressed: _confirmAndSignOut,
+                icon: const Icon(Icons.logout),
+                label: const Text('Đăng xuất'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                ),
               ),
             ),
           ],

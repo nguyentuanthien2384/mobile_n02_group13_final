@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:todoapp/sync/note_sync.dart';
 import 'package:todoapp/class/note.dart';
+import 'package:todoapp/helper/vietnamese_telex.dart';
 import 'package:todoapp/screen/rich_detail_screen_audio.dart';
 import 'package:record/record.dart' if (dart.library.io) 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
@@ -463,7 +464,18 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
                 onPressed: () {
                   showDialog(
                     context: context,
-                    builder: (context) => ShareDialog(noteRemoteId: _remoteId!),
+                    builder: (context) => ShareDialog(
+                      noteRemoteId: _remoteId!,
+                      note: Note(
+                        id: _noteId ?? 0,
+                        title: _title.text,
+                        content: _toContent(),
+                        createdAt: DateTime.now(),
+                        editedAt: DateTime.now(),
+                        remoteId: _remoteId,
+                        tagIds: _tagIds,
+                      ),
+                    ),
                   );
                 },
               ),
@@ -508,6 +520,10 @@ class _RichDetailScreenState extends State<RichDetailScreen> {
               child: TextField(
                 controller: _title,
                 autofocus: _title.text.isEmpty,
+                inputFormatters: const [VietnameseTelexFormatter()],
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.visiblePassword,
                 decoration: const InputDecoration(border: InputBorder.none, hintText: 'Title'),
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, fontSize: 20),
                 textInputAction: TextInputAction.next,

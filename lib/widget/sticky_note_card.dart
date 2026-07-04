@@ -30,41 +30,48 @@ class StickyNoteCard extends StatelessWidget {
   }
 
   // ─── My Notes: thẻ màu, có thể có ảnh, tiêu đề đậm + nội dung + ngày ──
+  // Bố cục lấp đầy chiều cao ô lưới để các thẻ đều nhau; ngày luôn nằm đáy.
   Widget _buildNote(BuildContext context) {
     final bg = NotePalette.resolve(note.color);
     final fg = NotePalette.textOn(bg);
     final body = plainTextFromContent(note.content);
+    final hasImage = note.imagePath != null && note.imagePath!.isNotEmpty;
     return _wrap(
       color: bg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (note.imagePath != null && note.imagePath!.isNotEmpty)
+          if (hasImage) ...[
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               child: _image(note.imagePath!),
             ),
-          if (note.imagePath != null && note.imagePath!.isNotEmpty)
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+          ],
           if ((note.title ?? '').isNotEmpty)
             Text(
               note.title!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.poppins(
-                color: fg, fontSize: 19, fontWeight: FontWeight.bold, height: 1.15),
+                color: fg, fontSize: 15, fontWeight: FontWeight.bold, height: 1.15),
             ),
           if (body.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              body,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: fg.withValues(alpha: 0.92), fontSize: 14, height: 1.3),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Text(
+                body,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 8,
+                style: TextStyle(color: fg.withValues(alpha: 0.92), fontSize: 12.5, height: 1.25),
+              ),
             ),
-          ],
-          const SizedBox(height: 12),
+          ] else
+            const Spacer(),
+          const SizedBox(height: 6),
           Text(
             formatVietnameseDate(note.editedAt ?? note.createdAt),
-            style: TextStyle(color: fg.withValues(alpha: 0.8), fontSize: 11, letterSpacing: 0.3),
+            style: TextStyle(color: fg.withValues(alpha: 0.8), fontSize: 10, letterSpacing: 0.2),
           ),
         ],
       ),
@@ -154,10 +161,10 @@ class StickyNoteCard extends StatelessWidget {
       onLongPress: onLongPress,
       child: Container(
         constraints: minHeight != null ? BoxConstraints(minHeight: minHeight) : null,
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.10),
@@ -173,11 +180,11 @@ class StickyNoteCard extends StatelessWidget {
 
   Widget _image(String path) {
     if (path.startsWith('http')) {
-      return Image.network(path, fit: BoxFit.cover, width: double.infinity, height: 130,
+      return Image.network(path, fit: BoxFit.cover, width: double.infinity, height: 78,
           errorBuilder: (_, __, ___) => const SizedBox.shrink());
     }
     final f = File(path);
-    return Image.file(f, fit: BoxFit.cover, width: double.infinity, height: 130,
+    return Image.file(f, fit: BoxFit.cover, width: double.infinity, height: 78,
         errorBuilder: (_, __, ___) => const SizedBox.shrink());
   }
 }
