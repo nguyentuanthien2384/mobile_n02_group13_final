@@ -1,5 +1,4 @@
-// import 'package:shared_preferences/shared_preferences.dart';
-// import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 class Note {
@@ -17,6 +16,7 @@ class Note {
   int? folderId; // Associated folder ID (null if not in folder)
   bool isFavorite; // Is marked as favorite note
   final List<String> collaborators; // List of user emails collaborating on this note
+  bool sharedExternally; // Đã chia sẻ ra ứng dụng ngoài / liên kết công khai
   // ─── Social / state fields (synced from backend; not stored in local toMap) ──
   bool isPublished;
   int likesCount;
@@ -43,6 +43,7 @@ class Note {
     this.folderId,
     this.isFavorite = false,
     List<String>? collaborators,
+    this.sharedExternally = false,
     this.isPublished = false,
     this.likesCount = 0,
     this.commentsCount = 0,
@@ -69,6 +70,8 @@ class Note {
       'noteType': noteType,
       'price': price,
       'imagePath': imagePath,
+      'collaborators': jsonEncode(collaborators),
+      'sharedExternally': sharedExternally ? 1 : 0,
     };
   }
 
@@ -87,6 +90,7 @@ class Note {
     int? folderId,
     bool? isFavorite,
     List<String>? collaborators,
+    bool? sharedExternally,
     bool? isPublished,
     int? likesCount,
     int? commentsCount,
@@ -111,6 +115,7 @@ class Note {
       folderId: folderId ?? this.folderId,
       isFavorite: isFavorite ?? this.isFavorite,
       collaborators: collaborators ?? this.collaborators,
+      sharedExternally: sharedExternally ?? this.sharedExternally,
       isPublished: isPublished ?? this.isPublished,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,

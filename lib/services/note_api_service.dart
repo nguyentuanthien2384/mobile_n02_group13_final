@@ -377,6 +377,18 @@ class NoteApiService {
     }
   }
 
+  static List<String> _decodeCollaborators(Object? raw) {
+    if (raw == null) return const [];
+    if (raw is List) return raw.map((e) => e.toString()).toList();
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) return decoded.map((e) => e.toString()).toList();
+      } catch (_) {}
+    }
+    return const [];
+  }
+
   static Note _parseNoteJson(Map<String, dynamic> json) {
     return Note(
       id: json['localId'] as int? ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -390,6 +402,8 @@ class NoteApiService {
       color: json['color'] as int? ?? 0,
       folderId: json['folderId'] as int?,
       isFavorite: json['isFavorite'] as bool? ?? false,
+      collaborators: _decodeCollaborators(json['collaborators']),
+      sharedExternally: json['sharedExternally'] == 1 || json['sharedExternally'] == true,
       isPublished: json['isPublished'] as bool? ?? false,
       likesCount: json['likesCount'] as int? ?? 0,
       commentsCount: json['commentsCount'] as int? ?? 0,

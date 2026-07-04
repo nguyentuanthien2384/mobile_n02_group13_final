@@ -38,7 +38,7 @@ class DatabaseHelper {
       join(await getDatabasesPath(), dbFileName),
       onCreate: (db, version) async {
         await db.execute(
-          'create table if not exists notes(id integer primary key autoincrement, title text, content text, createdAt text not null, editedAt text, pinned integer not null default 0, remoteId text, isChecklist integer not null default 0, deleted integer not null default 0, reminderAt text, color integer not null default 0, folderId integer, isFavorite integer not null default 0, noteType text not null default \'note\', price text, imagePath text)'
+          'create table if not exists notes(id integer primary key autoincrement, title text, content text, createdAt text not null, editedAt text, pinned integer not null default 0, remoteId text, isChecklist integer not null default 0, deleted integer not null default 0, reminderAt text, color integer not null default 0, folderId integer, isFavorite integer not null default 0, noteType text not null default \'note\', price text, imagePath text, collaborators text, sharedExternally integer not null default 0)'
         );
         await db.execute(
           'create table if not exists tags(id integer primary key autoincrement, name text not null, createdAt text not null, remoteId text)'
@@ -84,6 +84,8 @@ class DatabaseHelper {
         await addColumnIfMissing('noteType', 'text not null default \'note\'');
         await addColumnIfMissing('price', 'text');
         await addColumnIfMissing('imagePath', 'text');
+        await addColumnIfMissing('collaborators', 'text');
+        await addColumnIfMissing('sharedExternally', 'integer not null default 0');
 
         await db.execute(
           'CREATE TABLE IF NOT EXISTS tags(id integer primary key autoincrement, name text not null, createdAt text not null, remoteId text)'

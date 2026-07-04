@@ -118,6 +118,9 @@ class NoteSyncService {
             if (!remoteIsChecklist && content != null) {
               try { final l = jsonDecode(content); if (l is List) remoteIsChecklist = true; } catch (_) {}
             }
+            // Giữ lịch sử chia sẻ cục bộ (collaborators / sharedExternally)
+            // để đồng bộ realtime không xóa mất.
+            final existingLocal = await NoteDatabase.getNote(db, localId);
             final updated = Note(
               id: localId,
               title: title,
@@ -131,6 +134,8 @@ class NoteSyncService {
               color: color,
               folderId: folderId,
               isFavorite: isFavorite,
+              collaborators: existingLocal.collaborators,
+              sharedExternally: existingLocal.sharedExternally,
             );
             await TagDatabase.setTagsForNote(db, localId, mappedTagIds);
             await NoteDatabase.updateNote(db, updated);
@@ -230,7 +235,14 @@ class NoteSyncService {
           await NoteApiService.updateNote(n);
           print('[NoteSync] pushed newer local -> remoteId=${n.remoteId}');
         } else if (remoteEdited.isAfter(localEdited)) {
-          await NoteDatabase.updateNote(db, rn.copyWith(id: n.id));
+          // Giữ lịch sử chia sẻ cục bộ nếu bản remote không mang theo.
+          final merged = rn.copyWith(
+            id: n.id,
+            collaborators:
+                rn.collaborators.isNotEmpty ? rn.collaborators : n.collaborators,
+            sharedExternally: rn.sharedExternally || n.sharedExternally,
+          );
+          await NoteDatabase.updateNote(db, merged);
           print('[NoteSync] pulled newer remote -> localId=${n.id}');
         }
       }
@@ -239,10 +251,22 @@ class NoteSyncService {
     }
   }
 
+  // Chống tạo trùng: khóa theo localId để nhiều luồng (ensureSynced, reconcile,
+  // syncAll...) không đồng thời tạo nhiều bản remote cho cùng một ghi chú.
+  static final Set<int> _pushing = <int>{};
+
   static Future<void> pushAdded(Database db, Note note) async {
+    if (_pushing.contains(note.id)) return;
+    _pushing.add(note.id);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
+      // Kiểm tra lại DB phòng khi remoteId vừa được luồng khác gán.
+      final fresh = await NoteDatabase.getNote(db, note.id);
+      if (fresh.remoteId != null) {
+        note.remoteId = fresh.remoteId;
+        return;
+      }
       final created = await NoteApiService.createNote(note);
       if (created != null && created.remoteId != null) {
         note.remoteId = created.remoteId;
@@ -251,6 +275,8 @@ class NoteSyncService {
       }
     } catch (e) {
       print('[NoteSync] pushAdded error: $e');
+    } finally {
+      _pushing.remove(note.id);
     }
   }
 

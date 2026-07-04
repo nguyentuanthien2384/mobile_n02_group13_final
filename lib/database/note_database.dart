@@ -1,7 +1,19 @@
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:todoapp/class/note.dart';
 
 class NoteDatabase {
+  static List<String> _decodeCollaborators(Object? raw) {
+    if (raw == null) return const [];
+    try {
+      final decoded = jsonDecode(raw as String);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
   static Future<int> insertNote(Database db, Note note) async {
     final id = await db.insert(
       'notes',
@@ -47,6 +59,8 @@ class NoteDatabase {
       noteType: (e['noteType'] as String?) ?? 'note',
       price: e['price'] as String?,
       imagePath: e['imagePath'] as String?,
+      collaborators: _decodeCollaborators(e['collaborators']),
+      sharedExternally: ((e['sharedExternally'] ?? 0) as int) == 1,
     );
   }
 
@@ -97,6 +111,8 @@ class NoteDatabase {
       noteType: (noteInfo.first['noteType'] as String?) ?? 'note',
       price: noteInfo.first['price'] as String?,
       imagePath: noteInfo.first['imagePath'] as String?,
+      collaborators: _decodeCollaborators(noteInfo.first['collaborators']),
+      sharedExternally: ((noteInfo.first['sharedExternally'] ?? 0) as int) == 1,
     );
   }
 
