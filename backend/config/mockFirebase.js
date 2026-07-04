@@ -128,13 +128,9 @@ class MockDocRef {
 
   get ref() { return this; }
 
+  // The parent of a document is the collection that contains it.
   get parent() {
-    // Returns the parent collection; its `.parent` is the owning document.
-    const parts = this.collectionPath.split(path.sep);
-    return {
-      id: decodeURIComponent(parts[parts.length - 1] || ''),
-      parent: { id: decodeURIComponent((parts[parts.length - 2] || '').replace(/^sub_/, '')) },
-    };
+    return new MockCollection(this.collectionPath);
   }
 }
 
@@ -223,6 +219,23 @@ class MockQuery {
 class MockCollection {
   constructor(collectionPath) {
     this.collectionPath = collectionPath;
+  }
+
+  // Collection id = last path segment (e.g. 'shares', 'notes').
+  get id() {
+    const parts = this.collectionPath.split(path.sep);
+    return decodeURIComponent(parts[parts.length - 1] || '');
+  }
+
+  // The parent of a subcollection is the document that owns it. Subcollections
+  // live under a `sub_<encodedDocId>` folder; top-level collections have no parent.
+  get parent() {
+    const parts = this.collectionPath.split(path.sep);
+    const ownerFolder = parts[parts.length - 2] || '';
+    if (!ownerFolder.startsWith('sub_')) return null;
+    const docId = decodeURIComponent(ownerFolder.slice(4));
+    const docCollectionPath = parts.slice(0, parts.length - 2).join(path.sep);
+    return new MockDocRef(docCollectionPath, docId);
   }
 
   doc(id) { return new MockDocRef(this.collectionPath, id || uuidv4()); }

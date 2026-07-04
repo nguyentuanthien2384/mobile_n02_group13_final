@@ -199,6 +199,8 @@ router.post('/', rateLimit({ key: 'note-write', max: 120 }), async (req, res) =>
       localId: b.localId || null,
       reminderAt: b.reminderAt || null,
       coverImage: b.coverImage || '',
+      collaborators: b.collaborators ?? null,
+      sharedExternally: b.sharedExternally ?? 0,
       deleted: false,
       archived: false,
       isPublished: false,
@@ -249,7 +251,8 @@ router.put('/:id', rateLimit({ key: 'note-write', max: 240 }), async (req, res) 
 
     const updates = {};
     const allowed = ['title', 'content', 'pinned', 'isChecklist', 'tags', 'color',
-      'folderId', 'isFavorite', 'localId', 'reminderAt', 'coverImage'];
+      'folderId', 'isFavorite', 'localId', 'reminderAt', 'coverImage',
+      'collaborators', 'sharedExternally'];
     for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key];
     updates.editedAt = new Date().toISOString();
     await noteRef.update(updates);
@@ -597,15 +600,27 @@ router.post('/:id/share', async (req, res) => {
 
     if (!email) return res.status(400).json({ error: 'Cần email hoặc chọn chia sẻ công khai' });
 
+    // Resolve the recipient. Prefer the app's own user index (emailLower → the
+    // REAL uid of someone who has logged into this app) so the share is stored
+    // under the same uid the recipient authenticates with. Fall back to Firebase
+    // Auth lookup for real-Firebase deployments.
     let targetUser;
-    try {
-      targetUser = await getAuth().getUserByEmail(email);
-    } catch {
-      // fall back to the Firestore user index (works in mock + real)
-      const idx = await db.collection('users').where('emailLower', '==', email.toLowerCase()).limit(1).get();
-      if (idx.empty) return res.status(404).json({ error: 'Không tìm thấy người dùng với email này' });
+    const idx = await db
+      .collection('users')
+      .where('emailLower', '==', email.toLowerCase())
+      .limit(1)
+      .get();
+    if (!idx.empty) {
       const d = idx.docs[0];
       targetUser = { uid: d.id, email, displayName: d.data().displayName };
+    } else {
+      try {
+        targetUser = await getAuth().getUserByEmail(email);
+      } catch {
+        return res.status(404).json({
+          error: 'Không tìm thấy người dùng với email này. Người nhận cần đăng nhập ứng dụng ít nhất một lần.',
+        });
+      }
     }
     if (targetUser.uid === uid) return res.status(400).json({ error: 'Không thể chia sẻ với chính mình' });
 

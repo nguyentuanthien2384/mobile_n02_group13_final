@@ -16,5 +16,6 @@
     "fontSize": "medium",
     "sortMode": "editedDesc",
     "notificationsEnabled": true
-  }
+  },
+  "unreadNotifications": 15
 }
