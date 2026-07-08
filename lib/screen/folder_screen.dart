@@ -9,6 +9,7 @@ import 'package:todoapp/database/note_database.dart';
 import 'package:todoapp/widget/note_card.dart';
 import 'package:todoapp/sync/note_sync.dart';
 import 'package:todoapp/services/folder_api_service.dart';
+import 'package:todoapp/screen/folder_share_dialog.dart';
 import 'package:todoapp/screen/sticky_editor_screen.dart';
 import 'package:todoapp/theme/note_palette.dart';
 
@@ -34,7 +35,10 @@ class _FolderScreenState extends State<FolderScreen> {
     final db = await DatabaseHelper.database();
     final localFolders = await FolderDatabase.getFolders(db);
     if (mounted) {
-      Provider.of<FolderProvider>(context, listen: false).setFolders(localFolders);
+      Provider.of<FolderProvider>(
+        context,
+        listen: false,
+      ).setFolders(localFolders);
     }
 
     // Sync folders from API
@@ -46,7 +50,10 @@ class _FolderScreenState extends State<FolderScreen> {
         }
         final updatedLocal = await FolderDatabase.getFolders(db);
         if (mounted) {
-          Provider.of<FolderProvider>(context, listen: false).setFolders(updatedLocal);
+          Provider.of<FolderProvider>(
+            context,
+            listen: false,
+          ).setFolders(updatedLocal);
         }
       }
     } catch (_) {}
@@ -131,11 +138,13 @@ class _FolderScreenState extends State<FolderScreen> {
     Folder folder, {
     required bool isChecklist,
   }) async {
-    final result = await Navigator.pushNamed(
-      context,
-      route,
-      arguments: {'title': '', 'content': '', 'folderId': folder.id},
-    ) as Map?;
+    final result =
+        await Navigator.pushNamed(
+              context,
+              route,
+              arguments: {'title': '', 'content': '', 'folderId': folder.id},
+            )
+            as Map?;
     if (result == null) {
       if (mounted) _loadNotesInFolder(folder);
       return;
@@ -182,8 +191,13 @@ class _FolderScreenState extends State<FolderScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Text('Thêm thư mục mới', style: TextStyle(fontWeight: FontWeight.bold)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                'Thêm thư mục mới',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,7 +207,10 @@ class _FolderScreenState extends State<FolderScreen> {
                     decoration: InputDecoration(
                       hintText: 'Tên thư mục',
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      fillColor: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -201,7 +218,10 @@ class _FolderScreenState extends State<FolderScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Chọn màu sắc:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Chọn màu sắc:',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -223,7 +243,14 @@ class _FolderScreenState extends State<FolderScreen> {
                                 ? Border.all(color: Colors.white, width: 3)
                                 : null,
                             boxShadow: isSelected
-                                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4)]
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      blurRadius: 4,
+                                    ),
+                                  ]
                                 : null,
                           ),
                         ),
@@ -239,12 +266,14 @@ class _FolderScreenState extends State<FolderScreen> {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onPressed: () async {
                     if (nameController.text.trim().isEmpty) return;
                     Navigator.pop(context);
-                    
+
                     final newFolder = Folder(
                       id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
                       name: nameController.text.trim(),
@@ -254,14 +283,19 @@ class _FolderScreenState extends State<FolderScreen> {
 
                     final db = await DatabaseHelper.database();
                     await FolderDatabase.insertFolder(db, newFolder);
-                    
+
                     if (mounted) {
-                      Provider.of<FolderProvider>(context, listen: false).addFolder(newFolder);
+                      Provider.of<FolderProvider>(
+                        context,
+                        listen: false,
+                      ).addFolder(newFolder);
                     }
 
                     // Push to API
                     try {
-                      final createdRemote = await FolderApiService.createFolder(newFolder);
+                      final createdRemote = await FolderApiService.createFolder(
+                        newFolder,
+                      );
                       if (createdRemote != null) {
                         await FolderDatabase.insertFolder(db, createdRemote);
                         _fetchFolders();
@@ -283,7 +317,9 @@ class _FolderScreenState extends State<FolderScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa thư mục?'),
-        content: const Text('Các ghi chú trong thư mục này sẽ không bị xóa, chỉ được đưa ra ngoài thư mục.'),
+        content: const Text(
+          'Các ghi chú trong thư mục này sẽ không bị xóa, chỉ được đưa ra ngoài thư mục.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -300,9 +336,12 @@ class _FolderScreenState extends State<FolderScreen> {
     if (confirm == true) {
       final db = await DatabaseHelper.database();
       await FolderDatabase.deleteFolder(db, folder.id);
-      
+
       if (mounted) {
-        Provider.of<FolderProvider>(context, listen: false).removeFolder(folder.id);
+        Provider.of<FolderProvider>(
+          context,
+          listen: false,
+        ).removeFolder(folder.id);
         setState(() {
           if (_selectedFolder?.id == folder.id) {
             _selectedFolder = null;
@@ -313,8 +352,28 @@ class _FolderScreenState extends State<FolderScreen> {
 
       if (folder.remoteId != null) {
         try {
-          await FolderApiService.deleteFolder(folder.remoteId!);
+          await FolderApiService.deleteFolder(
+            folder.remoteId!,
+            localFolderId: folder.id,
+          );
         } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _openFolderShareDialog(Folder folder) async {
+    await showDialog(
+      context: context,
+      builder: (_) => FolderShareDialog(folder: folder),
+    );
+    await _fetchFolders();
+    if (mounted && _selectedFolder?.id == folder.id) {
+      final refreshed = Provider.of<FolderProvider>(
+        context,
+        listen: false,
+      ).getById(folder.id);
+      if (refreshed != null) {
+        setState(() => _selectedFolder = refreshed);
       }
     }
   }
@@ -326,9 +385,16 @@ class _FolderScreenState extends State<FolderScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selectedFolder != null ? _selectedFolder!.name : 'Thư mục',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: _selectedFolder != null ? Color(_selectedFolder!.color) : theme.colorScheme.primary,
+        title: Text(
+          _selectedFolder != null ? _selectedFolder!.name : 'Thư mục',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: _selectedFolder != null
+            ? Color(_selectedFolder!.color)
+            : theme.colorScheme.primary,
         iconTheme: const IconThemeData(color: Colors.white),
         leading: _selectedFolder != null
             ? IconButton(
@@ -342,6 +408,12 @@ class _FolderScreenState extends State<FolderScreen> {
               )
             : null,
         actions: [
+          if (_selectedFolder != null)
+            IconButton(
+              icon: const Icon(Icons.folder_shared_outlined),
+              tooltip: 'Chia sẻ thư mục',
+              onPressed: () => _openFolderShareDialog(_selectedFolder!),
+            ),
           if (_selectedFolder != null)
             IconButton(
               icon: const Icon(Icons.delete_outline),
@@ -374,18 +446,26 @@ class _FolderScreenState extends State<FolderScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.folder_open_outlined, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
+            Icon(
+              Icons.folder_open_outlined,
+              size: 80,
+              color: Colors.grey.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 16),
             const Text(
               'Chưa có thư mục nào',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: _addFolder,
               icon: const Icon(Icons.add),
               label: const Text('Tạo thư mục đầu tiên'),
-            )
+            ),
           ],
         ),
       );
@@ -405,7 +485,9 @@ class _FolderScreenState extends State<FolderScreen> {
         final folderColor = Color(f.color);
         return Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: InkWell(
             onTap: () {
               setState(() {
@@ -421,13 +503,26 @@ class _FolderScreenState extends State<FolderScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: folderColor.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.folder, color: folderColor, size: 28),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: folderColor.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.folder, color: folderColor, size: 28),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.folder_shared_outlined,
+                          size: 20,
+                        ),
+                        tooltip: 'Chia sẻ thư mục',
+                        onPressed: () => _openFolderShareDialog(f),
+                      ),
+                    ],
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -436,12 +531,18 @@ class _FolderScreenState extends State<FolderScreen> {
                         f.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Xem ghi chú',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -464,7 +565,11 @@ class _FolderScreenState extends State<FolderScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.sticky_note_2_outlined, size: 80, color: Colors.grey.withValues(alpha: 0.5)),
+            Icon(
+              Icons.sticky_note_2_outlined,
+              size: 80,
+              color: Colors.grey.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 16),
             const Text(
               'Không có ghi chú nào trong thư mục này',
@@ -484,18 +589,20 @@ class _FolderScreenState extends State<FolderScreen> {
         return NoteCard(
           note: note,
           onTap: (n) async {
-            final result = await Navigator.pushNamed(
-              context,
-              n.isChecklist ? '/todolist' : '/detail',
-              arguments: {
-                'id': n.id,
-                'title': n.title,
-                'content': n.content,
-                'remoteId': n.remoteId,
-                'tags': n.tagIds,
-                'folderId': n.folderId,
-              },
-            ) as Map?;
+            final result =
+                await Navigator.pushNamed(
+                      context,
+                      n.isChecklist ? '/todolist' : '/detail',
+                      arguments: {
+                        'id': n.id,
+                        'title': n.title,
+                        'content': n.content,
+                        'remoteId': n.remoteId,
+                        'tags': n.tagIds,
+                        'folderId': n.folderId,
+                      },
+                    )
+                    as Map?;
             // checklist tự lưu (cờ 'saved'); detail trả về map để lưu tại đây.
             if (result != null && result['saved'] != true) {
               final db = await DatabaseHelper.database();

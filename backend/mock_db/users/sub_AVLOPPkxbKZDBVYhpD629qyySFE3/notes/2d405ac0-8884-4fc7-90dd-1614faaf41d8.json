@@ -1,0 +1,22 @@
+{
+  "title": "Việc cần làm hôm nay",
+  "content": "[{\"text\":\"Học bài Flutter\",\"done\":true},{\"text\":\"Làm bài tập Provider\",\"done\":false},{\"text\":\"Đọc tài liệu Firebase\",\"done\":false},{\"text\":\"Tập thể dục 30 phút\",\"done\":true}]",
+  "createdAt": "2026-07-05T08:13:40.371Z",
+  "editedAt": "2026-07-05T08:13:40.371Z",
+  "pinned": false,
+  "isChecklist": 1,
+  "tags": [],
+  "color": 4286570708,
+  "folderId": 2,
+  "isFavorite": false,
+  "localId": 7,
+  "reminderAt": null,
+  "coverImage": "",
+  "collaborators": "[\"23010571@st.phenikaa-uni.edu.vn\"]",
+  "sharedExternally": 0,
+  "deleted": false,
+  "archived": false,
+  "isPublished": false,
+  "likesCount": 0,
+  "commentsCount": 0
+}

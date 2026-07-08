@@ -145,6 +145,9 @@ router.get('/shared', async (req, res) => {
           ownerUid,
           ownerName: shareData.ownerName || '',
           ownerPhoto: shareData.ownerPhoto || '',
+          sharedViaFolder: shareData.sharedViaFolder || false,
+          sharedFolderId: shareData.folderId || null,
+          sharedFolderName: shareData.folderName || '',
         });
       }
     }

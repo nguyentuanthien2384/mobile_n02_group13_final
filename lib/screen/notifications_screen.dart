@@ -48,18 +48,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (!mounted) return;
     // Navigate based on type.
     if (n.type == 'follow') {
-      Navigator.push(context,
-          MaterialPageRoute(builder: (_) => PublicProfileScreen(uid: n.actorUid)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => PublicProfileScreen(uid: n.actorUid)),
+      );
     } else if (n.noteId != null) {
       // Build a minimal FeedPost to open the post detail.
       final post = FeedPost(
         id: n.noteId!,
-        authorUid: '', // current user is the owner for like/comment notifications
+        authorUid:
+            '', // current user is the owner for like/comment notifications
         authorName: '',
         title: n.noteTitle,
       );
-      Navigator.push(context,
-          MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+      );
     }
   }
 
@@ -75,6 +80,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.person_add;
       case 'share':
         return Icons.share;
+      case 'folder_share':
+        return Icons.folder_shared;
       case 'mention':
         return Icons.alternate_email;
       default:
@@ -103,10 +110,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         leading: const BackButton(),
         title: const Text('Thông báo'),
         actions: [
-          TextButton(
-            onPressed: _markAllRead,
-            child: const Text('Đọc tất cả'),
-          ),
+          TextButton(onPressed: _markAllRead, child: const Text('Đọc tất cả')),
         ],
       ),
       body: RefreshIndicator(
@@ -123,8 +127,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   ListView(),
                   Center(
-                    child: Text('Chưa có thông báo nào',
-                        style: TextStyle(color: theme.colorScheme.outline)),
+                    child: Text(
+                      'Chưa có thông báo nào',
+                      style: TextStyle(color: theme.colorScheme.outline),
+                    ),
                   ),
                 ],
               );
@@ -135,21 +141,41 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               itemBuilder: (context, i) {
                 final n = items[i];
                 return Container(
-                  color: n.read ? null : theme.colorScheme.primaryContainer.withValues(alpha: 0.18),
+                  color: n.read
+                      ? null
+                      : theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.18,
+                        ),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: _colorFor(n.type, theme).withValues(alpha: 0.15),
-                      child: Icon(_iconFor(n.type), color: _colorFor(n.type, theme), size: 20),
+                      backgroundColor: _colorFor(
+                        n.type,
+                        theme,
+                      ).withValues(alpha: 0.15),
+                      child: Icon(
+                        _iconFor(n.type),
+                        color: _colorFor(n.type, theme),
+                        size: 20,
+                      ),
                     ),
-                    title: Text(n.message, maxLines: 2, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(_relative(n.createdAt),
-                        style: theme.textTheme.bodySmall),
+                    title: Text(
+                      n.message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      _relative(n.createdAt),
+                      style: theme.textTheme.bodySmall,
+                    ),
                     trailing: n.read
                         ? null
                         : Container(
-                            width: 8, height: 8,
+                            width: 8,
+                            height: 8,
                             decoration: const BoxDecoration(
-                                color: Colors.blue, shape: BoxShape.circle),
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                     onTap: () => _onTap(n),
                   ),

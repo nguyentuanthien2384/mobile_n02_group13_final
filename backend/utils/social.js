@@ -67,7 +67,7 @@ async function getProfileMeta(uid) {
  */
 async function createNotification({
   recipientUid,
-  type, // 'like' | 'comment' | 'reply' | 'follow' | 'share' | 'mention'
+  type, // 'like' | 'comment' | 'reply' | 'follow' | 'share' | 'folder_share' | 'mention'
   actor, // { uid, name, picture }
   noteId = null,
   noteTitle = null,

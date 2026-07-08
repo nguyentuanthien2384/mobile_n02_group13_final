@@ -1,4 +1,4 @@
-/// An in-app notification (like / comment / reply / follow / share / mention).
+/// An in-app notification (like / comment / reply / follow / share / folder_share / mention).
 class AppNotification {
   final String id;
   final String type;
@@ -38,7 +38,9 @@ class AppNotification {
       commentId: json['commentId'] as String?,
       text: json['text'] as String? ?? '',
       read: json['read'] as bool? ?? false,
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -55,6 +57,8 @@ class AppNotification {
         return '$actorName đã bắt đầu theo dõi bạn';
       case 'share':
         return '$actorName đã chia sẻ một ghi chú với bạn';
+      case 'folder_share':
+        return '$actorName đã chia sẻ thư mục "$text" với bạn';
       case 'mention':
         return '$actorName đã nhắc đến bạn: "$text"';
       default:

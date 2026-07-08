@@ -15,7 +15,8 @@ class Note {
   int color; // Color code (0 for default, or color int values)
   int? folderId; // Associated folder ID (null if not in folder)
   bool isFavorite; // Is marked as favorite note
-  final List<String> collaborators; // List of user emails collaborating on this note
+  final List<String>
+  collaborators; // List of user emails collaborating on this note
   bool sharedExternally; // Đã chia sẻ ra ứng dụng ngoài / liên kết công khai
   // ─── Social / state fields (synced from backend; not stored in local toMap) ──
   bool isPublished;
@@ -23,9 +24,15 @@ class Note {
   int commentsCount;
   bool archived;
   bool deleted;
+  String? ownerUid;
+  String? ownerName;
+  String? sharePermission;
+  bool sharedViaFolder;
+  String? sharedFolderId;
+  String? sharedFolderName;
   // ─── UI fields for the 3 note modes (My Notes / Reminder / Shopping) ──
   String noteType; // 'note' | 'reminder' | 'shopping'
-  String? price;   // used by shopping items (e.g. "30k")
+  String? price; // used by shopping items (e.g. "30k")
   String? imagePath; // local cover image path (My Notes cards)
 
   Note({
@@ -49,11 +56,17 @@ class Note {
     this.commentsCount = 0,
     this.archived = false,
     this.deleted = false,
+    this.ownerUid,
+    this.ownerName,
+    this.sharePermission,
+    this.sharedViaFolder = false,
+    this.sharedFolderId,
+    this.sharedFolderName,
     this.noteType = 'note',
     this.price,
     this.imagePath,
-  })  : tagIds = List<int>.from(tagIds ?? const []),
-        collaborators = List<String>.from(collaborators ?? const []);
+  }) : tagIds = List<int>.from(tagIds ?? const []),
+       collaborators = List<String>.from(collaborators ?? const []);
 
   Map<String, Object?> toMap() {
     return {
@@ -96,6 +109,12 @@ class Note {
     int? commentsCount,
     bool? archived,
     bool? deleted,
+    String? ownerUid,
+    String? ownerName,
+    String? sharePermission,
+    bool? sharedViaFolder,
+    String? sharedFolderId,
+    String? sharedFolderName,
     String? noteType,
     String? price,
     String? imagePath,
@@ -121,6 +140,12 @@ class Note {
       commentsCount: commentsCount ?? this.commentsCount,
       archived: archived ?? this.archived,
       deleted: deleted ?? this.deleted,
+      ownerUid: ownerUid ?? this.ownerUid,
+      ownerName: ownerName ?? this.ownerName,
+      sharePermission: sharePermission ?? this.sharePermission,
+      sharedViaFolder: sharedViaFolder ?? this.sharedViaFolder,
+      sharedFolderId: sharedFolderId ?? this.sharedFolderId,
+      sharedFolderName: sharedFolderName ?? this.sharedFolderName,
       noteType: noteType ?? this.noteType,
       price: price ?? this.price,
       imagePath: imagePath ?? this.imagePath,
@@ -261,12 +286,20 @@ class NoteProvider extends ChangeNotifier {
 
   bool isPinned(int id) => _pinnedNoteIds.contains(id);
 
-  List<Note> get pinnedNotes => _notes.where((n) => _pinnedNoteIds.contains(n.id)).toList();
-  List<Note> get unpinnedNotes => _notes.where((n) => !_pinnedNoteIds.contains(n.id)).toList();
+  List<Note> get pinnedNotes =>
+      _notes.where((n) => _pinnedNoteIds.contains(n.id)).toList();
+  List<Note> get unpinnedNotes =>
+      _notes.where((n) => !_pinnedNoteIds.contains(n.id)).toList();
 
   List<Note> search(String query) {
     final txt = query.trim().toLowerCase();
     if (txt.isEmpty) return List<Note>.from(_notes);
-    return _notes.where((n) => ((n.title ?? '').toLowerCase().contains(txt) || (n.content ?? '').toLowerCase().contains(txt))).toList();
+    return _notes
+        .where(
+          (n) =>
+              ((n.title ?? '').toLowerCase().contains(txt) ||
+              (n.content ?? '').toLowerCase().contains(txt)),
+        )
+        .toList();
   }
 }

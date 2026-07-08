@@ -7,12 +7,14 @@
   "isChecklist": false,
   "tags": [],
   "color": 4294825571,
-  "folderId": 1,
+  "folderId": null,
   "isFavorite": 1,
   "localId": 1,
   "reminderAt": null,
   "coverImage": "",
-  "collaborators": ["23010689@st.phenikaa-uni.edu.vn"],
+  "collaborators": [
+    "23010689@st.phenikaa-uni.edu.vn"
+  ],
   "sharedExternally": 0,
   "deleted": false,
   "archived": false,
