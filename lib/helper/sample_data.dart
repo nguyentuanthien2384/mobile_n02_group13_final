@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/class/tag.dart';
@@ -9,6 +10,10 @@ import 'package:todoapp/database/folder_database.dart';
 import 'package:todoapp/theme/note_palette.dart';
 
 /// Nạp dữ liệu mẫu vào SQLite cục bộ trong lần chạy đầu (khi chưa có ghi chú).
+///
+/// CHÚ Ý: Chỉ seed cho tài khoản khách (chưa đăng nhập). Khi người dùng đã
+/// đăng nhập, database mới sẽ trống — ghi chú được đồng bộ từ Firestore hoặc
+/// người dùng tự tạo. Điều này đảm bảo mỗi tài khoản chỉ thấy ghi chú của mình.
 ///
 /// Bao phủ toàn bộ các chức năng lưu trữ cục bộ của ứng dụng để mở app lên
 /// là thấy ngay nội dung ở mọi màn hình:
@@ -21,6 +26,11 @@ import 'package:todoapp/theme/note_palette.dart';
 ///   • Thùng rác (một ghi chú đã xóa mềm)
 class SampleData {
   static Future<void> seedIfEmpty(Database db) async {
+    // Không seed dữ liệu mẫu cho tài khoản đã đăng nhập.
+    // Mỗi user mới bắt đầu với database trống, ghi chú sẽ được đồng bộ từ
+    // Firestore hoặc người dùng tự tạo → đảm bảo phân quyền ghi chú đúng.
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) return;
     final count = Sqflite.firstIntValue(
       await db.rawQuery('SELECT COUNT(*) FROM notes'),
     ) ?? 0;

@@ -12,6 +12,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:todoapp/database/tag_database.dart';
 import 'package:todoapp/provider/tag_provider.dart';
+import 'package:todoapp/provider/folder_provider.dart';
 import 'package:todoapp/sync/tag_sync.dart';
 import 'package:todoapp/class/tag.dart';
 import 'package:todoapp/helper/database.dart';
@@ -212,6 +213,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ElevatedButton(
                   onPressed: () async {
                     Navigator.of(ctx).pop();
+                    // Xóa dữ liệu provider và cache DB trước khi đăng xuất
+                    Provider.of<NoteProvider>(context, listen: false).clearNotes();
+                    Provider.of<TagProvider>(context, listen: false).setTags([]);
+                    Provider.of<FolderProvider>(context, listen: false).setFolders([]);
+                    await DatabaseHelper.clearCache();
                     try {
                       await GoogleSignIn().signOut();
                     } catch (_) {}

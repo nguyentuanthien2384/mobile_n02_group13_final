@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:todoapp/helper/database.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/provider/tag_provider.dart';
+import 'package:todoapp/provider/folder_provider.dart';
 import 'package:todoapp/provider/theme_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -54,9 +55,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _signOut() async {
-    // Xóa dữ liệu trong provider trước khi đăng xuất.
+    // Xóa toàn bộ dữ liệu trong provider trước khi đăng xuất.
     Provider.of<NoteProvider>(context, listen: false).clearNotes();
     Provider.of<TagProvider>(context, listen: false).setTags([]);
+    Provider.of<FolderProvider>(context, listen: false).setFolders([]);
 
     // Xóa cache DB (sẽ nạp lại khi có người dùng khác đăng nhập).
     await DatabaseHelper.clearCache();
