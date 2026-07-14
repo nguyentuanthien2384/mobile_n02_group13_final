@@ -11,16 +11,27 @@ import 'package:todoapp/class/tag.dart';
 import 'package:todoapp/database/tag_database.dart';
 import 'package:todoapp/helper/note_text.dart';
 import 'package:todoapp/services/notification_service.dart';
+import 'package:todoapp/services/note_api_service.dart';
 import 'dart:convert';
 import 'package:todoapp/class/folder.dart';
 import 'package:todoapp/database/folder_database.dart';
 import 'package:todoapp/screen/share_dialog.dart';
+import 'package:todoapp/helper/note_search.dart';
 
 /// Ordering options for the note list.
 enum NoteSortMode { editedDesc, editedAsc, titleAsc, createdDesc }
 
 class NoteList extends StatefulWidget {
-  const NoteList({super.key, this.db, this.searchQuery = '', this.onDelete, this.filterTagId, this.tagFilterBar, this.sortMode = NoteSortMode.editedDesc});
+  const NoteList({
+    super.key,
+    this.db,
+    this.searchQuery = '',
+    this.onDelete,
+    this.filterTagId,
+    this.tagFilterBar,
+    this.sortMode = NoteSortMode.editedDesc,
+    this.advancedFilter,
+  });
 
   final Database? db;
   final String searchQuery;
@@ -28,6 +39,7 @@ class NoteList extends StatefulWidget {
   final int? filterTagId;
   final Widget? tagFilterBar;
   final NoteSortMode sortMode;
+  final bool Function(Note note)? advancedFilter;
 
   @override
   State<NoteList> createState() => _NoteListState();
@@ -43,12 +55,17 @@ class _NoteListState extends State<NoteList> {
   }
 
   List<Note> _filterNotes(List<Note> notes, String query) {
-    final txt = query.trim().toLowerCase();
-    if (txt.isEmpty) return List<Note>.from(notes);
-    return notes.where((note) =>
-      ((note.title ?? '').toLowerCase().contains(txt) ||
-        (note.content ?? '').toLowerCase().contains(txt))
-    ).toList();
+    return notes
+        .where(
+          (note) =>
+              matchesNoteSearch(
+                query: query,
+                title: note.title,
+                content: note.content,
+              ) &&
+              (widget.advancedFilter?.call(note) ?? true),
+        )
+        .toList();
   }
 
   List<Note> _applyTagFilter(List<Note> notes) {
@@ -84,14 +101,18 @@ class _NoteListState extends State<NoteList> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Reminder'),
-          content: Text('Current reminder: ${_formatReminderFull(note.reminderAt!)}'),
+          content: Text(
+            'Current reminder: ${_formatReminderFull(note.reminderAt!)}',
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx, 'remove'),
-                child: const Text('Remove', style: TextStyle(color: Colors.red))),
+              onPressed: () => Navigator.pop(ctx, 'remove'),
+              child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            ),
             TextButton(
-                onPressed: () => Navigator.pop(ctx, 'change'),
-                child: const Text('Change time')),
+              onPressed: () => Navigator.pop(ctx, 'change'),
+              child: const Text('Change time'),
+            ),
           ],
         ),
       );
@@ -101,9 +122,9 @@ class _NoteListState extends State<NoteList> {
         final updated = await NoteDatabase.getNote(db, note.id);
         if (!mounted) return;
         Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reminder removed')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Reminder removed')));
         return;
       }
       if (action != 'change') return;
@@ -126,8 +147,13 @@ class _NoteListState extends State<NoteList> {
       initialTime: TimeOfDay.fromDateTime(initial),
     );
     if (time == null) return;
-    final scheduled =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final scheduled = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
     if (scheduled.isBefore(DateTime.now())) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -149,9 +175,11 @@ class _NoteListState extends State<NoteList> {
     Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(ok
-            ? 'Reminder set for ${_formatReminderFull(scheduled)}'
-            : 'Reminder saved (notification could not be scheduled)'),
+        content: Text(
+          ok
+              ? 'Reminder set for ${_formatReminderFull(scheduled)}'
+              : 'Reminder saved (notification could not be scheduled)',
+        ),
       ),
     );
   }
@@ -167,9 +195,23 @@ class _NoteListState extends State<NoteList> {
     await NotificationService.instance.cancel(note.id);
     if (!mounted) return;
     Provider.of<NoteProvider>(context, listen: false).removeNote(note.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Moved to trash')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Moved to trash')));
+  }
+
+  Future<void> _archive(Note note) async {
+    final db = _db;
+    if (db == null) return;
+    await NoteDatabase.setArchived(db, note.id, true);
+    if (note.remoteId != null) {
+      await NoteApiService.archive(note.remoteId!);
+    }
+    if (!mounted) return;
+    Provider.of<NoteProvider>(context, listen: false).removeNote(note.id);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Đã lưu trữ ghi chú')));
   }
 
   Future<void> _toggleFavorite(Note note) async {
@@ -181,7 +223,11 @@ class _NoteListState extends State<NoteList> {
     if (!mounted) return;
     Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(updated.isFavorite ? 'Đã thêm vào mục yêu thích' : 'Đã bỏ yêu thích')),
+      SnackBar(
+        content: Text(
+          updated.isFavorite ? 'Đã thêm vào mục yêu thích' : 'Đã bỏ yêu thích',
+        ),
+      ),
     );
   }
 
@@ -192,7 +238,9 @@ class _NoteListState extends State<NoteList> {
     if (folders.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chưa có thư mục nào. Hãy tạo thư mục trước!')),
+        const SnackBar(
+          content: Text('Chưa có thư mục nào. Hãy tạo thư mục trước!'),
+        ),
       );
       return;
     }
@@ -273,7 +321,9 @@ class _NoteListState extends State<NoteList> {
                   shape: BoxShape.circle,
                   border: c == 0 ? Border.all(color: Colors.grey) : null,
                 ),
-                child: c == 0 ? const Icon(Icons.format_color_reset, size: 20) : null,
+                child: c == 0
+                    ? const Icon(Icons.format_color_reset, size: 20)
+                    : null,
               ),
             );
           }).toList(),
@@ -293,7 +343,8 @@ class _NoteListState extends State<NoteList> {
   Future<void> _openShareDialog(Note note) async {
     showDialog(
       context: context,
-      builder: (context) => ShareDialog(noteRemoteId: note.remoteId, note: note),
+      builder: (context) =>
+          ShareDialog(noteRemoteId: note.remoteId, note: note),
     );
   }
 
@@ -303,13 +354,25 @@ class _NoteListState extends State<NoteList> {
     if (attach) {
       await TagDatabase.attachTagToNote(db, note.id, tag.id);
       if (!mounted) return;
-      Provider.of<NoteProvider>(context, listen: false).addTagToNote(note.id, tag.id);
-      Provider.of<TagProvider>(context, listen: false).attachNote(tag.id, note.id);
+      Provider.of<NoteProvider>(
+        context,
+        listen: false,
+      ).addTagToNote(note.id, tag.id);
+      Provider.of<TagProvider>(
+        context,
+        listen: false,
+      ).attachNote(tag.id, note.id);
     } else {
       await TagDatabase.detachTagFromNote(db, note.id, tag.id);
       if (!mounted) return;
-      Provider.of<NoteProvider>(context, listen: false).removeTagFromNote(note.id, tag.id);
-      Provider.of<TagProvider>(context, listen: false).detachNote(tag.id, note.id);
+      Provider.of<NoteProvider>(
+        context,
+        listen: false,
+      ).removeTagFromNote(note.id, tag.id);
+      Provider.of<TagProvider>(
+        context,
+        listen: false,
+      ).detachNote(tag.id, note.id);
     }
     await NoteSyncService.pushNoteTags(db, note.id);
   }
@@ -322,7 +385,9 @@ class _NoteListState extends State<NoteList> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (sheetCtx) {
         return StatefulBuilder(
           builder: (ctx, setState) {
@@ -340,12 +405,21 @@ class _NoteListState extends State<NoteList> {
                   children: [
                     Row(
                       children: [
-                        Text('Labels', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Text(
+                          'Labels',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const Spacer(),
                         TextButton(
                           onPressed: () {
                             Navigator.pop(ctx);
-                            Navigator.pushNamed(context, '/tags', arguments: {'db': db});
+                            Navigator.pushNamed(
+                              context,
+                              '/tags',
+                              arguments: {'db': db},
+                            );
                           },
                           child: const Text('Manage tags'),
                         ),
@@ -355,7 +429,10 @@ class _NoteListState extends State<NoteList> {
                     if (tags.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 32),
-                        child: Text('No tags yet. Use Manage tags to create new ones.', style: theme.textTheme.bodyMedium),
+                        child: Text(
+                          'No tags yet. Use Manage tags to create new ones.',
+                          style: theme.textTheme.bodyMedium,
+                        ),
                       )
                     else
                       ConstrainedBox(
@@ -371,7 +448,9 @@ class _NoteListState extends State<NoteList> {
                             return CheckboxListTile(
                               value: isChecked,
                               title: Text(tag.name),
-                              subtitle: Text('${tag.noteIds.length} note${tag.noteIds.length == 1 ? '' : 's'}'),
+                              subtitle: Text(
+                                '${tag.noteIds.length} note${tag.noteIds.length == 1 ? '' : 's'}',
+                              ),
                               onChanged: (value) async {
                                 final shouldAttach = value ?? false;
                                 setState(() {
@@ -381,7 +460,11 @@ class _NoteListState extends State<NoteList> {
                                     selected.remove(tag.id);
                                   }
                                 });
-                                await _applyTagSelection(note, tag, shouldAttach);
+                                await _applyTagSelection(
+                                  note,
+                                  tag,
+                                  shouldAttach,
+                                );
                               },
                             );
                           },
@@ -405,29 +488,39 @@ class _NoteListState extends State<NoteList> {
         .whereType<String>()
         .where((name) => name.trim().isNotEmpty)
         .toList();
-    
+
     if (allTags.isEmpty) return const [];
-    
+
     // Limit to max 2 tags for pinned notes to prevent overflow
     const maxTags = 2;
     final displayTags = allTags.take(maxTags).toList();
     final remainingCount = allTags.length - maxTags;
-    
-    final chips = displayTags.map(
-      (name) => Chip(
-        label: Text(name, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9)),
-        visualDensity: VisualDensity.compact,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
-        backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 3),
-      ),
-    ).toList();
-    
+
+    final chips = displayTags
+        .map(
+          (name) => Chip(
+            label: Text(
+              name,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontSize: 9),
+            ),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+            backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 3),
+          ),
+        )
+        .toList();
+
     if (remainingCount > 0) {
       chips.add(
         Chip(
-          label: Text('+$remainingCount', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9)),
+          label: Text(
+            '+$remainingCount',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9),
+          ),
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
@@ -436,10 +529,8 @@ class _NoteListState extends State<NoteList> {
         ),
       );
     }
-    
-    return [
-      Wrap(spacing: 1, runSpacing: 1, children: chips),
-    ];
+
+    return [Wrap(spacing: 1, runSpacing: 1, children: chips)];
   }
 
   @override
@@ -458,16 +549,18 @@ class _NoteListState extends State<NoteList> {
     if (isSearching) {
       pinned = const [];
     } else {
-      pinned = List<Note>.from(_filterNotes(_applyTagFilter(provider.pinnedNotes), ''))
-        ..sort(_compareTimeDesc);
+      pinned = List<Note>.from(
+        _filterNotes(_applyTagFilter(provider.pinnedNotes), ''),
+      )..sort(_compareTimeDesc);
     }
 
     final List<Note> unpinned;
     if (isSearching) {
       unpinned = searchResults;
     } else {
-      unpinned = List<Note>.from(_filterNotes(_applyTagFilter(provider.unpinnedNotes), ''))
-        ..sort(_compareTimeDesc);
+      unpinned = List<Note>.from(
+        _filterNotes(_applyTagFilter(provider.unpinnedNotes), ''),
+      )..sort(_compareTimeDesc);
     }
 
     // Empty states
@@ -475,7 +568,9 @@ class _NoteListState extends State<NoteList> {
       return Center(
         child: Text(
           'No note match',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.outline),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.outline,
+          ),
         ),
       );
     }
@@ -483,7 +578,9 @@ class _NoteListState extends State<NoteList> {
       return Center(
         child: Text(
           'No note',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.outline),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.outline,
+          ),
         ),
       );
     }
@@ -491,9 +588,7 @@ class _NoteListState extends State<NoteList> {
     return CustomScrollView(
       slivers: [
         if (widget.tagFilterBar != null)
-          SliverToBoxAdapter(
-            child: widget.tagFilterBar!,
-          ),
+          SliverToBoxAdapter(child: widget.tagFilterBar!),
         if (!isSearching && pinned.isNotEmpty)
           SliverToBoxAdapter(
             child: Padding(
@@ -503,17 +598,17 @@ class _NoteListState extends State<NoteList> {
                   Text(
                     'Pinned notes',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
                   const Spacer(),
                   Text(
                     '$totalCount note${totalCount == 1 ? '' : 's'}',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
                 ],
               ),
@@ -536,10 +631,17 @@ class _NoteListState extends State<NoteList> {
                       final newNoteInfo = await Navigator.pushNamed(
                         context,
                         route,
-                        arguments: {'title': note.title, 'content': note.content, 'id': note.id, 'remoteId': note.remoteId, 'tags': note.tagIds},
+                        arguments: {
+                          'title': note.title,
+                          'content': note.content,
+                          'id': note.id,
+                          'remoteId': note.remoteId,
+                          'tags': note.tagIds,
+                        },
                       );
                       if (newNoteInfo is! Map) return;
-                      final returnedTags = (newNoteInfo['tags'] as List?)?.cast<int>();
+                      final returnedTags = (newNoteInfo['tags'] as List?)
+                          ?.cast<int>();
                       final edited = Note(
                         id: note.id,
                         title: newNoteInfo['title'] as String,
@@ -556,14 +658,23 @@ class _NoteListState extends State<NoteList> {
                         await NoteSyncService.pushUpdated(edited);
                       }
                       if (!mounted) return;
-                      Provider.of<NoteProvider>(context, listen: false).updateNote(edited);
+                      Provider.of<NoteProvider>(
+                        context,
+                        listen: false,
+                      ).updateNote(edited);
                     },
                     child: SizedBox(
                       width: 160,
                       child: Card(
-                        color: note.color != 0 ? Color(note.color) : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: note.color != 0
+                            ? Color(note.color)
+                            : Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
                         elevation: 3,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         child: ClipRect(
                           child: Padding(
                             padding: const EdgeInsets.all(5),
@@ -576,140 +687,278 @@ class _NoteListState extends State<NoteList> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Expanded(
-                                      child: (note.title == null || (note.title ?? '').isEmpty)
+                                      child:
+                                          (note.title == null ||
+                                              (note.title ?? '').isEmpty)
                                           ? const SizedBox(height: 0)
-                                            : Text(
+                                          : Text(
                                               note.title ?? '',
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                                color: note.color != 0 ? (ThemeData.estimateBrightnessForColor(Color(note.color)) == Brightness.dark ? Colors.white : Colors.black87) : Theme.of(context).textTheme.bodyMedium?.color,
-                                              ),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium!
+                                                  .copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                    color: note.color != 0
+                                                        ? (ThemeData.estimateBrightnessForColor(
+                                                                    Color(
+                                                                      note.color,
+                                                                    ),
+                                                                  ) ==
+                                                                  Brightness
+                                                                      .dark
+                                                              ? Colors.white
+                                                              : Colors.black87)
+                                                        : Theme.of(context)
+                                                              .textTheme
+                                                              .bodyMedium
+                                                              ?.color,
+                                                  ),
                                             ),
                                     ),
-                                  PopupMenuButton<String>(
-                                    padding: EdgeInsets.zero,
-                                    icon: Icon(PhosphorIconsDuotone.dotsThreeVertical, size: 16, color: note.color != 0 ? (ThemeData.estimateBrightnessForColor(Color(note.color)) == Brightness.dark ? Colors.white : Colors.black87) : Theme.of(context).colorScheme.primary),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                    onSelected: (value) async {
-                                      switch (value) {
-                                        case 'unpin':
-                                          final updated = note.copyWith(pinned: false, editedAt: DateTime.now());
-                                          if (_db != null) {
-                                            await NoteDatabase.updateNote(_db!, updated);
-                                            await NoteSyncService.pushUpdated(updated);
-                                          }
-                                          if (!mounted) return;
-                                          Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
-                                          break;
-                                        case 'labels':
-                                          await _openLabelSelector(note);
-                                          break;
-                                        case 'favorite':
-                                          await _toggleFavorite(note);
-                                          break;
-                                        case 'folder':
-                                          await _moveToFolder(note);
-                                          break;
-                                        case 'color':
-                                          await _changeColor(note);
-                                          break;
-                                        case 'share':
-                                          await _openShareDialog(note);
-                                          break;
-                                        case 'delete':
-                                          await _softDelete(note);
-                                          break;
-                                        default:
-                                      }
-                                    },
-                                    itemBuilder: (context) => [
-                                      PopupMenuItem(
-                                        value: 'unpin',
-                                        child: Row(children: [
-                                          Icon(PhosphorIconsDuotone.pushPin),
-                                          const SizedBox(width: 8),
-                                          Text('Bỏ ghim', style: Theme.of(context).textTheme.bodySmall),
-                                        ]),
+                                    PopupMenuButton<String>(
+                                      padding: EdgeInsets.zero,
+                                      icon: Icon(
+                                        PhosphorIconsDuotone.dotsThreeVertical,
+                                        size: 16,
+                                        color: note.color != 0
+                                            ? (ThemeData.estimateBrightnessForColor(
+                                                        Color(note.color),
+                                                      ) ==
+                                                      Brightness.dark
+                                                  ? Colors.white
+                                                  : Colors.black87)
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
                                       ),
-                                      PopupMenuItem(
-                                        value: 'labels',
-                                        child: Row(children: [
-                                          const Icon(Icons.label_outline),
-                                          const SizedBox(width: 8),
-                                          Text('Thêm nhãn', style: Theme.of(context).textTheme.bodySmall),
-                                        ]),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
                                       ),
-                                      PopupMenuItem(
-                                        value: 'favorite',
-                                        child: Row(children: [
-                                          Icon(note.isFavorite ? Icons.star : Icons.star_border),
-                                          const SizedBox(width: 8),
-                                          Text(note.isFavorite ? 'Bỏ yêu thích' : 'Yêu thích', style: Theme.of(context).textTheme.bodySmall),
-                                        ]),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'folder',
-                                        child: Row(children: [
-                                          const Icon(Icons.folder_open_outlined),
-                                          const SizedBox(width: 8),
-                                          Text('Đưa vào thư mục', style: Theme.of(context).textTheme.bodySmall),
-                                        ]),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'color',
-                                        child: Row(children: [
-                                          const Icon(Icons.color_lens_outlined),
-                                          const SizedBox(width: 8),
-                                          Text('Đổi màu sắc', style: Theme.of(context).textTheme.bodySmall),
-                                        ]),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'share',
-                                        child: Row(children: [
-                                          const Icon(Icons.share_outlined),
-                                          const SizedBox(width: 8),
-                                          Text('Chia sẻ', style: Theme.of(context).textTheme.bodySmall),
-                                        ]),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'delete',
-                                        child: Row(children: [
-                                          Icon(PhosphorIconsDuotone.trash, color: Colors.red),
-                                          const SizedBox(width: 8),
-                                          Text('Xóa', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.red)),
-                                        ]),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              if ((note.content ?? '').trim().isNotEmpty)
-                                Flexible(
-                                  child: Text(
-                                    _plainPreview(note.content),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
-                                  ),
+                                      onSelected: (value) async {
+                                        switch (value) {
+                                          case 'unpin':
+                                            final updated = note.copyWith(
+                                              pinned: false,
+                                              editedAt: DateTime.now(),
+                                            );
+                                            if (_db != null) {
+                                              await NoteDatabase.updateNote(
+                                                _db!,
+                                                updated,
+                                              );
+                                              await NoteSyncService.pushUpdated(
+                                                updated,
+                                              );
+                                            }
+                                            if (!mounted) return;
+                                            Provider.of<NoteProvider>(
+                                              context,
+                                              listen: false,
+                                            ).updateNote(updated);
+                                            break;
+                                          case 'labels':
+                                            await _openLabelSelector(note);
+                                            break;
+                                          case 'favorite':
+                                            await _toggleFavorite(note);
+                                            break;
+                                          case 'folder':
+                                            await _moveToFolder(note);
+                                            break;
+                                          case 'color':
+                                            await _changeColor(note);
+                                            break;
+                                          case 'share':
+                                            await _openShareDialog(note);
+                                            break;
+                                          case 'delete':
+                                            await _softDelete(note);
+                                            break;
+                                          case 'archive':
+                                            await _archive(note);
+                                            break;
+                                          default:
+                                        }
+                                      },
+                                      itemBuilder: (context) => [
+                                        PopupMenuItem(
+                                          value: 'unpin',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                PhosphorIconsDuotone.pushPin,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Bỏ ghim',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'labels',
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.label_outline),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Thêm nhãn',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'favorite',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                note.isFavorite
+                                                    ? Icons.star
+                                                    : Icons.star_border,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                note.isFavorite
+                                                    ? 'Bỏ yêu thích'
+                                                    : 'Yêu thích',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'folder',
+                                          child: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.folder_open_outlined,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Đưa vào thư mục',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'color',
+                                          child: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.color_lens_outlined,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Đổi màu sắc',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'share',
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.share_outlined),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Chia sẻ',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'archive',
+                                          child: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.archive_outlined,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Lưu trữ',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                PhosphorIconsDuotone.trash,
+                                                color: Colors.red,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Xóa',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: Colors.red,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              if (note.tagIds.isNotEmpty) ..._buildTagChipWidgetsForPinned(note),
-                              Text(
-                                _formatDdMmYyyy(note.editedAt),
-                                style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                                  fontStyle: FontStyle.italic,
-                                  color: Theme.of(context).colorScheme.outline,
-                                  fontSize: 9,
+                                if ((note.content ?? '').trim().isNotEmpty)
+                                  Flexible(
+                                    child: Text(
+                                      _plainPreview(note.content),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(fontSize: 11),
+                                    ),
+                                  ),
+                                if (note.tagIds.isNotEmpty)
+                                  ..._buildTagChipWidgetsForPinned(note),
+                                Text(
+                                  _formatDdMmYyyy(note.editedAt),
+                                  style: Theme.of(context).textTheme.bodySmall!
+                                      .copyWith(
+                                        fontStyle: FontStyle.italic,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outline,
+                                        fontSize: 9,
+                                      ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                       ),
                     ),
                   );
@@ -725,97 +974,105 @@ class _NoteListState extends State<NoteList> {
               child: Text(
                 'List notes',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
               ),
             ),
           ),
         ),
         SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final note = unpinned[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: NoteCard(
-                  key: ValueKey(note.id),
-                  note: note,
-                  onTap: (Note note) async {
-                    final route = note.isChecklist ? '/todolist' : '/detail';
-                    final newNoteInfo = await Navigator.pushNamed(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final note = unpinned[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: NoteCard(
+                key: ValueKey(note.id),
+                note: note,
+                onTap: (Note note) async {
+                  final route = note.isChecklist ? '/todolist' : '/detail';
+                  final newNoteInfo = await Navigator.pushNamed(
+                    context,
+                    route,
+                    arguments: {
+                      'title': note.title,
+                      'content': note.content,
+                      'id': note.id,
+                      'remoteId': note.remoteId,
+                      'tags': note.tagIds,
+                    },
+                  );
+                  if (newNoteInfo is! Map) return;
+                  // update note in database and Provider state
+                  final returnedTags = (newNoteInfo['tags'] as List?)
+                      ?.cast<int>();
+                  final edited = Note(
+                    id: note.id,
+                    title: newNoteInfo['title'] as String,
+                    content: newNoteInfo['content'] as String,
+                    createdAt: note.createdAt,
+                    editedAt: DateTime.now(),
+                    pinned: note.pinned,
+                    remoteId: note.remoteId,
+                    isChecklist: note.isChecklist,
+                    tagIds: returnedTags ?? note.tagIds,
+                    color: note.color,
+                    folderId: note.folderId,
+                    isFavorite: note.isFavorite,
+                  );
+                  if (_db != null) await NoteDatabase.updateNote(_db!, edited);
+                  if (!mounted) return;
+                  Provider.of<NoteProvider>(
+                    context,
+                    listen: false,
+                  ).updateNote(edited);
+                },
+                onTogglePin: (bool pinned) async {
+                  final updated = Note(
+                    id: note.id,
+                    title: note.title,
+                    content: note.content,
+                    createdAt: note.createdAt,
+                    editedAt: DateTime.now(),
+                    pinned: pinned,
+                    remoteId: note.remoteId,
+                    isChecklist: note.isChecklist,
+                    tagIds: note.tagIds,
+                    color: note.color,
+                    folderId: note.folderId,
+                    isFavorite: note.isFavorite,
+                  );
+                  if (_db != null) {
+                    await NoteDatabase.updateNote(_db!, updated);
+                    await NoteSyncService.pushUpdated(updated);
+                  }
+                  if (!mounted) return;
+                  Provider.of<NoteProvider>(
+                    context,
+                    listen: false,
+                  ).updateNote(updated);
+                },
+                onManageLabels: _openLabelSelector,
+                onShare: _openShareDialog,
+                onSetReminder: _setReminder,
+                onMoveToFolder: _moveToFolder,
+                onToggleFavorite: _toggleFavorite,
+                onChangeColor: _changeColor,
+                onArchive: _archive,
+                delete: (int id) async {
+                  if (widget.onDelete != null) {
+                    await widget.onDelete!(id);
+                  } else if (_db != null) {
+                    final note = Provider.of<NoteProvider>(
                       context,
-                      route,
-                      arguments: {
-                        'title': note.title,
-                        'content': note.content,
-                        'id': note.id,
-                        'remoteId': note.remoteId,
-                        'tags': note.tagIds,
-                      },
-                    );
-                    if (newNoteInfo is! Map) return;
-                    // update note in database and Provider state
-                    final returnedTags = (newNoteInfo['tags'] as List?)?.cast<int>();
-                    final edited = Note(
-                      id: note.id,
-                      title: newNoteInfo['title'] as String,
-                      content: newNoteInfo['content'] as String,
-                      createdAt: note.createdAt,
-                      editedAt: DateTime.now(),
-                      pinned: note.pinned,
-                      remoteId: note.remoteId,
-                      isChecklist: note.isChecklist,
-                      tagIds: returnedTags ?? note.tagIds,
-                      color: note.color,
-                      folderId: note.folderId,
-                      isFavorite: note.isFavorite,
-                    );
-                    if (_db != null) await NoteDatabase.updateNote(_db!, edited);
-                    if (!mounted) return;
-                    Provider.of<NoteProvider>(context, listen: false).updateNote(edited);
-                  },
-                  onTogglePin: (bool pinned) async {
-                    final updated = Note(
-                      id: note.id,
-                      title: note.title,
-                      content: note.content,
-                      createdAt: note.createdAt,
-                      editedAt: DateTime.now(),
-                      pinned: pinned,
-                      remoteId: note.remoteId,
-                      isChecklist: note.isChecklist,
-                      tagIds: note.tagIds,
-                      color: note.color,
-                      folderId: note.folderId,
-                      isFavorite: note.isFavorite,
-                    );
-                    if (_db != null) {
-                      await NoteDatabase.updateNote(_db!, updated);
-                      await NoteSyncService.pushUpdated(updated);
-                    }
-                    if (!mounted) return;
-                    Provider.of<NoteProvider>(context, listen: false).updateNote(updated);
-                  },
-                  onManageLabels: _openLabelSelector,
-                  onShare: _openShareDialog,
-                  onSetReminder: _setReminder,
-                  onMoveToFolder: _moveToFolder,
-                  onToggleFavorite: _toggleFavorite,
-                  onChangeColor: _changeColor,
-                  delete: (int id) async {
-                    if (widget.onDelete != null) {
-                      await widget.onDelete!(id);
-                    } else if (_db != null) {
-                      final note = Provider.of<NoteProvider>(context, listen: false).notes.firstWhere((n) => n.id == id);
-                      await _softDelete(note);
-                    }
-                  },
-                ),
-              );
-            },
-            childCount: unpinned.length,
-          ),
+                      listen: false,
+                    ).notes.firstWhere((n) => n.id == id);
+                    await _softDelete(note);
+                  }
+                },
+              ),
+            );
+          }, childCount: unpinned.length),
         ),
       ],
     );
@@ -876,4 +1133,3 @@ String _plainPreview(String? content) {
   } catch (_) {}
   return content;
 }
-

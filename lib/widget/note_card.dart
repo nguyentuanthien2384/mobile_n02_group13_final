@@ -18,6 +18,7 @@ class NoteCard extends StatefulWidget {
     this.onMoveToFolder,
     this.onToggleFavorite,
     this.onChangeColor,
+    this.onArchive,
   });
 
   final Note note;
@@ -30,6 +31,7 @@ class NoteCard extends StatefulWidget {
   final Future<void> Function(Note note)? onMoveToFolder;
   final Future<void> Function(Note note)? onToggleFavorite;
   final Future<void> Function(Note note)? onChangeColor;
+  final Future<void> Function(Note note)? onArchive;
 
   @override
   State<NoteCard> createState() => _NoteCardState();
@@ -53,9 +55,10 @@ class _NoteCardState extends State<NoteCard> {
         ? Color(widget.note.color)
         : theme.colorScheme.surfaceContainerHighest;
     final textColor = widget.note.color != 0
-        ? (ThemeData.estimateBrightnessForColor(Color(widget.note.color)) == Brightness.dark
-            ? Colors.white
-            : Colors.black87)
+        ? (ThemeData.estimateBrightnessForColor(Color(widget.note.color)) ==
+                  Brightness.dark
+              ? Colors.white
+              : Colors.black87)
         : theme.textTheme.bodyMedium?.color;
 
     return Card(
@@ -69,18 +72,32 @@ class _NoteCardState extends State<NoteCard> {
           contentPadding: EdgeInsets.zero,
           title: (widget.note.title == null || widget.note.title!.isEmpty)
               ? (widget.note.reminderAt != null || widget.note.isFavorite
-                  ? Row(children: [
-                      if (widget.note.isFavorite)
-                        const Icon(Icons.star, size: 16, color: Colors.amber),
-                      if (widget.note.reminderAt != null) ...[
-                        const SizedBox(width: 6),
-                        Icon(Icons.alarm, size: 16, color: theme.colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Text(_formatReminder(widget.note.reminderAt!),
-                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
-                      ]
-                    ])
-                  : null)
+                    ? Row(
+                        children: [
+                          if (widget.note.isFavorite)
+                            const Icon(
+                              Icons.star,
+                              size: 16,
+                              color: Colors.amber,
+                            ),
+                          if (widget.note.reminderAt != null) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.alarm,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _formatReminder(widget.note.reminderAt!),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      )
+                    : null)
               : Row(
                   children: [
                     Expanded(
@@ -103,7 +120,11 @@ class _NoteCardState extends State<NoteCard> {
                     if (widget.note.reminderAt != null)
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
-                        child: Icon(Icons.alarm, size: 16, color: theme.colorScheme.primary),
+                        child: Icon(
+                          Icons.alarm,
+                          size: 16,
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
                   ],
                 ),
@@ -112,14 +133,17 @@ class _NoteCardState extends State<NoteCard> {
             children: [
               if (widget.note.isChecklist)
                 _ChecklistPreview(contentJson: widget.note.content)
-              else if (widget.note.content != null && widget.note.content!.isNotEmpty)
+              else if (widget.note.content != null &&
+                  widget.note.content!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     _plainPreview(widget.note.content!),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: textColor),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: textColor,
+                    ),
                   ),
                 ),
               ..._buildTagWidgets(context),
@@ -128,123 +152,186 @@ class _NoteCardState extends State<NoteCard> {
                 child: Text(
                   _formatDdMmYyyy(widget.note.editedAt),
                   style: theme.textTheme.bodySmall!.copyWith(
-                      fontStyle: FontStyle.italic,
-                      fontWeight: FontWeight.w500,
-                      color: widget.note.color != 0 ? textColor?.withValues(alpha: 0.7) : theme.colorScheme.outline),
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                    color: widget.note.color != 0
+                        ? textColor?.withValues(alpha: 0.7)
+                        : theme.colorScheme.outline,
+                  ),
                 ),
               ),
             ],
           ),
           onTap: () async => await _onTap(widget.note),
           trailing: PopupMenuButton<String>(
-            icon: Icon(PhosphorIconsDuotone.dotsThreeVertical, color: widget.note.color != 0 ? textColor : theme.colorScheme.primary),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            icon: Icon(
+              PhosphorIconsDuotone.dotsThreeVertical,
+              color: widget.note.color != 0
+                  ? textColor
+                  : theme.colorScheme.primary,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             onSelected: (value) async {
               switch (value) {
                 case 'pin':
-                  if (widget.onTogglePin != null) await widget.onTogglePin!(true);
+                  if (widget.onTogglePin != null)
+                    await widget.onTogglePin!(true);
                   break;
                 case 'unpin':
-                  if (widget.onTogglePin != null) await widget.onTogglePin!(false);
+                  if (widget.onTogglePin != null)
+                    await widget.onTogglePin!(false);
                   break;
                 case 'labels':
-                  if (widget.onManageLabels != null) await widget.onManageLabels!(widget.note);
+                  if (widget.onManageLabels != null)
+                    await widget.onManageLabels!(widget.note);
                   break;
                 case 'reminder':
-                  if (widget.onSetReminder != null) await widget.onSetReminder!(widget.note);
+                  if (widget.onSetReminder != null)
+                    await widget.onSetReminder!(widget.note);
                   break;
                 case 'favorite':
-                  if (widget.onToggleFavorite != null) await widget.onToggleFavorite!(widget.note);
+                  if (widget.onToggleFavorite != null)
+                    await widget.onToggleFavorite!(widget.note);
                   break;
                 case 'folder':
-                  if (widget.onMoveToFolder != null) await widget.onMoveToFolder!(widget.note);
+                  if (widget.onMoveToFolder != null)
+                    await widget.onMoveToFolder!(widget.note);
                   break;
                 case 'color':
-                  if (widget.onChangeColor != null) await widget.onChangeColor!(widget.note);
+                  if (widget.onChangeColor != null)
+                    await widget.onChangeColor!(widget.note);
                   break;
                 case 'share':
-                  if (widget.onShare != null) await widget.onShare!(widget.note);
+                  if (widget.onShare != null)
+                    await widget.onShare!(widget.note);
                   break;
                 case 'delete':
                   await _delete(widget.note.id);
+                  break;
+                case 'archive':
+                  if (widget.onArchive != null)
+                    await widget.onArchive!(widget.note);
                   break;
                 default:
               }
             },
             itemBuilder: (context) {
-              final isPinned = Provider.of<NoteProvider>(context, listen: false).isPinned(widget.note.id);
+              final isPinned = Provider.of<NoteProvider>(
+                context,
+                listen: false,
+              ).isPinned(widget.note.id);
               final itemTextStyle = theme.textTheme.bodySmall;
               return [
                 if (!isPinned)
                   PopupMenuItem(
                     value: 'pin',
-                    child: Row(children: [
-                      Icon(PhosphorIconsDuotone.pushPin),
-                      const SizedBox(width: 8),
-                      Text('Ghim', style: itemTextStyle),
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(PhosphorIconsDuotone.pushPin),
+                        const SizedBox(width: 8),
+                        Text('Ghim', style: itemTextStyle),
+                      ],
+                    ),
                   )
                 else
                   PopupMenuItem(
                     value: 'unpin',
-                    child: Row(children: [
-                      Icon(PhosphorIconsDuotone.pushPin),
-                      const SizedBox(width: 8),
-                      Text('Bỏ Ghim', style: itemTextStyle),
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(PhosphorIconsDuotone.pushPin),
+                        const SizedBox(width: 8),
+                        Text('Bỏ Ghim', style: itemTextStyle),
+                      ],
+                    ),
                   ),
                 PopupMenuItem(
                   value: 'labels',
-                  child: Row(children: [
-                    const Icon(Icons.label_outline),
-                    const SizedBox(width: 8),
-                    Text('Thêm nhãn', style: itemTextStyle),
-                  ]),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.label_outline),
+                      const SizedBox(width: 8),
+                      Text('Thêm nhãn', style: itemTextStyle),
+                    ],
+                  ),
                 ),
                 if (widget.onSetReminder != null)
                   PopupMenuItem(
                     value: 'reminder',
-                    child: Row(children: [
-                      Icon(widget.note.reminderAt != null
-                          ? Icons.alarm_on
-                          : Icons.alarm_add),
-                      const SizedBox(width: 8),
-                      Text(widget.note.reminderAt != null ? 'Sửa nhắc nhở' : 'Đặt nhắc nhở',
-                          style: itemTextStyle),
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(
+                          widget.note.reminderAt != null
+                              ? Icons.alarm_on
+                              : Icons.alarm_add,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.note.reminderAt != null
+                              ? 'Sửa nhắc nhở'
+                              : 'Đặt nhắc nhở',
+                          style: itemTextStyle,
+                        ),
+                      ],
+                    ),
                   ),
                 PopupMenuItem(
                   value: 'favorite',
-                  child: Row(children: [
-                    Icon(widget.note.isFavorite ? Icons.star : Icons.star_border),
-                    const SizedBox(width: 8),
-                    Text(widget.note.isFavorite ? 'Bỏ yêu thích' : 'Yêu thích', style: itemTextStyle),
-                  ]),
+                  child: Row(
+                    children: [
+                      Icon(
+                        widget.note.isFavorite ? Icons.star : Icons.star_border,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.note.isFavorite ? 'Bỏ yêu thích' : 'Yêu thích',
+                        style: itemTextStyle,
+                      ),
+                    ],
+                  ),
                 ),
                 PopupMenuItem(
                   value: 'folder',
-                  child: Row(children: [
-                    const Icon(Icons.folder_open_outlined),
-                    const SizedBox(width: 8),
-                    Text('Đưa vào thư mục', style: itemTextStyle),
-                  ]),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.folder_open_outlined),
+                      const SizedBox(width: 8),
+                      Text('Đưa vào thư mục', style: itemTextStyle),
+                    ],
+                  ),
                 ),
                 PopupMenuItem(
                   value: 'color',
-                  child: Row(children: [
-                    const Icon(Icons.color_lens_outlined),
-                    const SizedBox(width: 8),
-                    Text('Đổi màu sắc', style: itemTextStyle),
-                  ]),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.color_lens_outlined),
+                      const SizedBox(width: 8),
+                      Text('Đổi màu sắc', style: itemTextStyle),
+                    ],
+                  ),
                 ),
                 if (widget.onShare != null)
                   PopupMenuItem(
                     value: 'share',
-                    child: Row(children: [
-                      const Icon(Icons.share_outlined),
-                      const SizedBox(width: 8),
-                      Text('Chia sẻ', style: itemTextStyle),
-                    ]),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.share_outlined),
+                        const SizedBox(width: 8),
+                        Text('Chia sẻ', style: itemTextStyle),
+                      ],
+                    ),
+                  ),
+                if (widget.onArchive != null)
+                  PopupMenuItem(
+                    value: 'archive',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.archive_outlined),
+                        const SizedBox(width: 8),
+                        Text('Lưu trữ', style: itemTextStyle),
+                      ],
+                    ),
                   ),
                 PopupMenuItem(
                   value: 'delete',
@@ -252,7 +339,10 @@ class _NoteCardState extends State<NoteCard> {
                     children: [
                       Icon(PhosphorIconsDuotone.trash, color: Colors.red),
                       const SizedBox(width: 8),
-                      Text('Xóa', style: itemTextStyle?.copyWith(color: Colors.red)),
+                      Text(
+                        'Xóa',
+                        style: itemTextStyle?.copyWith(color: Colors.red),
+                      ),
                     ],
                   ),
                 ),
@@ -273,7 +363,12 @@ class _NoteCardState extends State<NoteCard> {
         .where((name) => name.trim().isNotEmpty)
         .map(
           (name) => Chip(
-            label: Text(name, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11)),
+            label: Text(
+              name,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontSize: 11),
+            ),
             visualDensity: VisualDensity.compact,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
@@ -349,7 +444,11 @@ class _ChecklistPreview extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          Icon(done ? Icons.check_box : Icons.check_box_outline_blank, size: 18, color: theme.colorScheme.primary),
+          Icon(
+            done ? Icons.check_box : Icons.check_box_outline_blank,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

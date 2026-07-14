@@ -36,7 +36,8 @@ class NotificationService {
 
       final androidImpl = _plugin
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       await androidImpl?.createNotificationChannel(
         const AndroidNotificationChannel(
           _channelId,
@@ -61,11 +62,16 @@ class NotificationService {
     required String title,
     required String body,
     required DateTime scheduledAt,
+    String repeat = 'none',
+    int leadMinutes = 0,
   }) async {
     await init();
-    if (scheduledAt.isBefore(DateTime.now())) return false;
+    final notificationAt = scheduledAt.subtract(
+      Duration(minutes: leadMinutes.clamp(0, 24 * 60) as int),
+    );
+    if (notificationAt.isBefore(DateTime.now())) return false;
     try {
-      final when = tz.TZDateTime.from(scheduledAt, tz.local);
+      final when = tz.TZDateTime.from(notificationAt, tz.local);
       await _plugin.zonedSchedule(
         id: id,
         title: title.isEmpty ? 'Note reminder' : title,
@@ -82,6 +88,11 @@ class NotificationService {
           iOS: DarwinNotificationDetails(),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: switch (repeat) {
+          'daily' => DateTimeComponents.time,
+          'weekly' => DateTimeComponents.dayOfWeekAndTime,
+          _ => null,
+        },
       );
       return true;
     } catch (e) {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -8,6 +9,7 @@ import 'package:todoapp/class/note.dart';
 import 'package:todoapp/database/folder_database.dart';
 import 'package:todoapp/database/note_database.dart';
 import 'package:todoapp/helper/database.dart';
+import 'package:todoapp/helper/note_search.dart';
 import 'package:todoapp/helper/sample_data.dart';
 import 'package:todoapp/screen/sticky_editor_screen.dart';
 import 'package:todoapp/screen/share_dialog.dart';
@@ -37,13 +39,19 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
   static const _modes = [
     _ModeConfig('note', 'MY NOTES', Color(0xFFE9EDCB), Color(0xFF8A8A8A)),
     _ModeConfig('reminder', 'REMINDER', Color(0xFFF3F39E), Color(0xFFE5392F)),
-    _ModeConfig('shopping', 'SHOPPING\nLIST', Color(0xFFD9B7B7), Color(0xFFE5392F)),
+    _ModeConfig(
+      'shopping',
+      'SHOPPING\nLIST',
+      Color(0xFFD9B7B7),
+      Color(0xFFE5392F),
+    ),
   ];
 
   int _mode = 0;
   final _search = TextEditingController();
   String _query = '';
   Database? _db;
+  String? _sessionUid;
   List<Note> _all = [];
   bool _loading = true;
 
@@ -51,7 +59,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
   void initState() {
     super.initState();
     _init();
-    _search.addListener(() => setState(() => _query = _search.text.trim().toLowerCase()));
+    _search.addListener(
+      () => setState(() => _query = _search.text.trim().toLowerCase()),
+    );
   }
 
   @override
@@ -61,17 +71,23 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
   }
 
   Future<void> _init() async {
+    final sessionUid = FirebaseAuth.instance.currentUser?.uid;
     final db = await DatabaseHelper.database();
-    await SampleData.seedIfEmpty(db); // nạp dữ liệu mẫu lần đầu
+    if (!mounted || !DatabaseHelper.isCurrentUser(sessionUid)) return;
+    if (sessionUid == null) {
+      await SampleData.seedIfEmpty(db); // nạp dữ liệu mẫu lần đầu
+    }
+    if (!mounted || !DatabaseHelper.isCurrentUser(sessionUid)) return;
+    _sessionUid = sessionUid;
     _db = db;
     await _load();
   }
 
   Future<void> _load() async {
     final db = _db;
-    if (db == null) return;
+    if (db == null || !DatabaseHelper.isCurrentUser(_sessionUid)) return;
     final notes = await NoteDatabase.getNotes(db);
-    if (!mounted) return;
+    if (!mounted || !DatabaseHelper.isCurrentUser(_sessionUid)) return;
     setState(() {
       _all = notes;
       _loading = false;
@@ -83,19 +99,23 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
     final type = _modes[_mode].type;
     return _all.where((n) {
       if ((n.noteType.isEmpty ? 'note' : n.noteType) != type) return false;
-      if (_query.isEmpty) return true;
-      final t = (n.title ?? '').toLowerCase();
-      final c = (n.content ?? '').toLowerCase();
-      return t.contains(_query) || c.contains(_query);
-    }).toList()
-      ..sort((a, b) => (b.editedAt ?? b.createdAt).compareTo(a.editedAt ?? a.createdAt));
+      return matchesNoteSearch(
+        query: _query,
+        title: n.title,
+        content: n.content,
+      );
+    }).toList()..sort(
+      (a, b) =>
+          (b.editedAt ?? b.createdAt).compareTo(a.editedAt ?? a.createdAt),
+    );
   }
 
   Future<void> _openEditor({Note? note}) async {
     final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => StickyEditorScreen(note: note, noteType: _modes[_mode].type),
+        builder: (_) =>
+            StickyEditorScreen(note: note, noteType: _modes[_mode].type),
       ),
     );
     if (changed == true) _load();
@@ -133,17 +153,19 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
   Future<void> _openViaRoute(String route, Note note) async {
     final db = _db;
     if (db == null) return;
-    final result = await Navigator.pushNamed(
-      context,
-      route,
-      arguments: {
-        'title': note.title,
-        'content': note.content,
-        'id': note.id,
-        'remoteId': note.remoteId,
-        'tags': note.tagIds,
-      },
-    ) as Map?;
+    final result =
+        await Navigator.pushNamed(
+              context,
+              route,
+              arguments: {
+                'title': note.title,
+                'content': note.content,
+                'id': note.id,
+                'remoteId': note.remoteId,
+                'tags': note.tagIds,
+              },
+            )
+            as Map?;
     if (result == null) return;
     // Màn checklist tự lưu vào DB (trả cờ 'saved'); chỉ cần nạp lại danh sách.
     if (result['saved'] == true) {
@@ -163,14 +185,19 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
   }
 
   /// Tạo ghi chú nâng cao (rich text + ghi âm) hoặc checklist qua route.
-  Future<void> _createViaRoute(String route, {required bool isChecklist}) async {
+  Future<void> _createViaRoute(
+    String route, {
+    required bool isChecklist,
+  }) async {
     final db = _db;
     if (db == null) return;
-    final result = await Navigator.pushNamed(
-      context,
-      route,
-      arguments: {'title': '', 'content': ''},
-    ) as Map?;
+    final result =
+        await Navigator.pushNamed(
+              context,
+              route,
+              arguments: {'title': '', 'content': ''},
+            )
+            as Map?;
     if (result == null) return;
     // Màn checklist đã tự lưu vào DB (cờ 'saved'); chỉ cần nạp lại danh sách.
     if (result['saved'] == true) {
@@ -247,6 +274,11 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.today_outlined),
+              title: const Text('Tổng quan hôm nay'),
+              onTap: () => Navigator.pop(ctx, 'today'),
+            ),
+            ListTile(
               leading: const Icon(Icons.checklist_rtl),
               title: const Text('Chọn & xóa nhiều'),
               onTap: () => Navigator.pop(ctx, 'select'),
@@ -280,6 +312,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
       case 'select':
         await Navigator.pushNamed(context, '/select', arguments: {'db': _db});
         break;
+      case 'today':
+        await Navigator.pushNamed(context, '/today');
+        break;
       case 'search':
         await Navigator.pushNamed(context, '/search', arguments: {'db': _db});
         break;
@@ -310,7 +345,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.drive_file_move_outline),
-              title: Text(inFolder ? 'Chuyển sang thư mục khác' : 'Đưa vào thư mục'),
+              title: Text(
+                inFolder ? 'Chuyển sang thư mục khác' : 'Đưa vào thư mục',
+              ),
               onTap: () => Navigator.pop(ctx, 'folder'),
             ),
             if (inFolder)
@@ -326,7 +363,10 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('Xóa ghi chú', style: TextStyle(color: Colors.red)),
+              title: const Text(
+                'Xóa ghi chú',
+                style: TextStyle(color: Colors.red),
+              ),
               onTap: () => Navigator.pop(ctx, 'delete'),
             ),
           ],
@@ -363,7 +403,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
     if (folders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Chưa có thư mục nào. Hãy tạo thư mục ở tab "Thư mục" trước!'),
+          content: Text(
+            'Chưa có thư mục nào. Hãy tạo thư mục ở tab "Thư mục" trước!',
+          ),
         ),
       );
       return;
@@ -379,21 +421,25 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Text('Chọn thư mục',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              child: Text(
+                'Chọn thư mục',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
             ),
             Flexible(
               child: ListView(
                 shrinkWrap: true,
                 children: folders
-                    .map((f) => ListTile(
-                          leading: Icon(Icons.folder, color: Color(f.color)),
-                          title: Text(f.name),
-                          trailing: note.folderId == f.id
-                              ? const Icon(Icons.check, color: Colors.green)
-                              : null,
-                          onTap: () => Navigator.pop(ctx, f),
-                        ))
+                    .map(
+                      (f) => ListTile(
+                        leading: Icon(Icons.folder, color: Color(f.color)),
+                        title: Text(f.name),
+                        trailing: note.folderId == f.id
+                            ? const Icon(Icons.check, color: Colors.green)
+                            : null,
+                        onTap: () => Navigator.pop(ctx, f),
+                      ),
+                    )
                     .toList(),
               ),
             ),
@@ -402,7 +448,10 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
       ),
     );
     if (selected == null || !mounted) return;
-    final updated = note.copyWith(folderId: selected.id, editedAt: DateTime.now());
+    final updated = note.copyWith(
+      folderId: selected.id,
+      editedAt: DateTime.now(),
+    );
     await NoteDatabase.updateNote(db, updated);
     try {
       await NoteSyncService.pushUpdated(updated);
@@ -426,9 +475,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
     } catch (_) {}
     await _load();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Đã bỏ ghi chú khỏi thư mục')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Đã bỏ ghi chú khỏi thư mục')));
   }
 
   Future<void> _confirmDelete(Note note) async {
@@ -438,8 +487,14 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
         title: const Text('Xóa ghi chú?'),
         content: Text('"${note.title ?? ''}" sẽ được chuyển vào thùng rác.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Xóa')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa'),
+          ),
         ],
       ),
     );
@@ -466,34 +521,36 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
                       : visible.isEmpty
-                          ? _buildEmpty(cfg)
-                          : cfg.type == 'note'
-                              // My Notes: lưới đều 2 cột, các thẻ cùng kích thước.
-                              ? GridView.builder(
-                                  padding: const EdgeInsets.fromLTRB(10, 4, 10, 96),
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    crossAxisSpacing: 10,
-                                    mainAxisSpacing: 10,
-                                    childAspectRatio: 1.28,
-                                  ),
-                                  itemCount: visible.length,
-                                  itemBuilder: (_, i) => StickyNoteCard(
-                                    note: visible[i],
-                                    onTap: () => _openNote(visible[i]),
-                                    onLongPress: () => _showNoteActions(visible[i]),
-                                  ),
-                                )
-                              : MasonryTwoColumn(
-                                  children: visible
-                                      .map((n) => StickyNoteCard(
-                                            note: n,
-                                            onTap: () => _openNote(n),
-                                            onLongPress: () => _showNoteActions(n),
-                                          ))
-                                      .toList(),
+                      ? _buildEmpty(cfg)
+                      : cfg.type == 'note'
+                      // My Notes: lưới đều 2 cột, các thẻ cùng kích thước.
+                      ? GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(10, 4, 10, 96),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                                childAspectRatio: 1.28,
+                              ),
+                          itemCount: visible.length,
+                          itemBuilder: (_, i) => StickyNoteCard(
+                            note: visible[i],
+                            onTap: () => _openNote(visible[i]),
+                            onLongPress: () => _showNoteActions(visible[i]),
+                          ),
+                        )
+                      : MasonryTwoColumn(
+                          children: visible
+                              .map(
+                                (n) => StickyNoteCard(
+                                  note: n,
+                                  onTap: () => _openNote(n),
+                                  onLongPress: () => _showNoteActions(n),
                                 ),
+                              )
+                              .toList(),
+                        ),
                 ),
               ],
             ),
@@ -510,7 +567,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
             ),
             // Thanh chuyển chế độ
             Positioned(
-              left: 0, right: 0, bottom: 14,
+              left: 0,
+              right: 0,
+              bottom: 14,
               child: Center(child: _buildModeBar()),
             ),
           ],
@@ -528,7 +587,11 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
           Text(
             cfg.title,
             style: GoogleFonts.cinzel(
-              fontSize: 34, fontWeight: FontWeight.w700, color: Colors.black87, height: 1.05),
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+              height: 1.05,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -540,7 +603,12 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(28),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6)],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 6,
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
@@ -569,8 +637,12 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
               GestureDetector(
                 onTap: _openMoreMenu,
                 child: Container(
-                  width: 48, height: 48,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  width: 48,
+                  height: 48,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
                   child: const Icon(Icons.more_horiz, color: Colors.black54),
                 ),
               ),
@@ -578,8 +650,12 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
               GestureDetector(
                 onTap: () => Navigator.pushNamed(context, '/profile'),
                 child: Container(
-                  width: 48, height: 48,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  width: 48,
+                  height: 48,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
                   child: const Icon(Icons.person, color: Colors.black54),
                 ),
               ),
@@ -600,7 +676,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
             Icon(Icons.note_add_outlined, size: 56, color: Colors.black26),
             const SizedBox(height: 12),
             Text(
-              _query.isNotEmpty ? 'Không tìm thấy kết quả' : 'Chưa có mục nào. Nhấn + để thêm.',
+              _query.isNotEmpty
+                  ? 'Không tìm thấy kết quả'
+                  : 'Chưa có mục nào. Nhấn + để thêm.',
               style: const TextStyle(color: Colors.black54),
               textAlign: TextAlign.center,
             ),
@@ -616,7 +694,9 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(30),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -635,7 +715,10 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
       onTap: () => setState(() => _mode = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: active ? 14 : 12,
+          vertical: 8,
+        ),
         decoration: BoxDecoration(
           color: active ? const Color(0xFFEDEDED) : Colors.transparent,
           borderRadius: BorderRadius.circular(22),
@@ -645,7 +728,13 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
             Icon(icon, size: 20, color: Colors.black87),
             if (active) ...[
               const SizedBox(width: 6),
-              Text(label, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
           ],
         ),
@@ -668,7 +757,9 @@ class _VietnameseToggle extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: enabled ? Theme.of(context).colorScheme.primary : Colors.grey.shade300,
+              color: enabled
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.grey.shade300,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(

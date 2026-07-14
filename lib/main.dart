@@ -23,6 +23,7 @@ import 'screen/performance_test_screen.dart';
 import 'screen/note_view_screen.dart';
 import 'screen/statistics_screen.dart';
 import 'screen/trash_screen.dart';
+import 'screen/archived_notes_screen.dart';
 import 'services/notification_service.dart';
 import 'screen/main_shell.dart';
 import 'screen/onboarding_screen.dart';
@@ -30,6 +31,9 @@ import 'screen/settings_screen.dart';
 import 'screen/folder_screen.dart';
 import 'screen/shared_notes_screen.dart';
 import 'screen/favorites_screen.dart';
+import 'screen/security_screen.dart';
+import 'screen/today_screen.dart';
+import 'widget/app_lock_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,7 +56,8 @@ Future<void> main() async {
   final bool isLoggedIn = FirebaseAuth.instance.currentUser != null;
 
   final prefs = await SharedPreferences.getInstance();
-  final bool onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+  final bool onboardingCompleted =
+      prefs.getBool('onboarding_completed') ?? false;
   String initialRoute;
   if (!onboardingCompleted) {
     initialRoute = '/onboarding';
@@ -71,7 +76,11 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => SocialProvider()),
         ChangeNotifierProvider.value(value: themeProvider),
       ],
-      child: TodoApp(database: database, isLoggedIn: isLoggedIn, initialRoute: initialRoute),
+      child: TodoApp(
+        database: database,
+        isLoggedIn: isLoggedIn,
+        initialRoute: initialRoute,
+      ),
     ),
   );
 }
@@ -96,10 +105,9 @@ ThemeData buildAppTheme(Brightness brightness) {
         fontWeight: FontWeight.bold,
       ),
     ),
-    textTheme: GoogleFonts.robotoTextTheme(base.textTheme).apply(
-      bodyColor: scheme.onSurface,
-      displayColor: scheme.onSurface,
-    ),
+    textTheme: GoogleFonts.robotoTextTheme(
+      base.textTheme,
+    ).apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
   );
 }
 
@@ -108,7 +116,12 @@ class TodoApp extends StatefulWidget {
   final bool isLoggedIn;
   final String initialRoute;
 
-  const TodoApp({super.key, this.database, required this.isLoggedIn, required this.initialRoute});
+  const TodoApp({
+    super.key,
+    this.database,
+    required this.isLoggedIn,
+    required this.initialRoute,
+  });
 
   @override
   State<TodoApp> createState() => _TodoAppState();
@@ -125,7 +138,7 @@ class _TodoAppState extends State<TodoApp> {
     // Check if app was opened from an email link
     final auth = FirebaseAuth.instance;
     final user = auth.currentUser;
-    
+
     // If user is not logged in, check for email link
     if (user == null) {
       // This will be handled by the LoginScreen when it checks for auth state changes
@@ -150,7 +163,7 @@ class _TodoAppState extends State<TodoApp> {
       initialRoute: widget.initialRoute,
       routes: {
         '/login': (context) => const LoginScreen(),
-        '/': (context) => const MainShell(),
+        '/': (context) => const AppLockGate(child: MainShell()),
         '/detail': (context) => const RichDetailScreen(),
         '/todolist': (context) => const TodoListScreen(),
         '/search': (context) => const SearchScreen(),
@@ -161,11 +174,14 @@ class _TodoAppState extends State<TodoApp> {
         '/view': (context) => const NoteViewScreen(),
         '/statistics': (context) => const StatisticsScreen(),
         '/trash': (context) => const TrashScreen(),
+        '/archived': (context) => const ArchivedNotesScreen(),
         '/onboarding': (context) => const OnboardingScreen(),
         '/settings': (context) => const SettingsScreen(),
         '/folders': (context) => const FolderScreen(),
         '/shared': (context) => const SharedNotesScreen(),
         '/favorites': (context) => const FavoritesScreen(),
+        '/security': (context) => const SecurityScreen(),
+        '/today': (context) => const TodayScreen(),
       },
       // Note: Deep link handling for email authentication
       // When app opens from email link, Android passes the link via intent

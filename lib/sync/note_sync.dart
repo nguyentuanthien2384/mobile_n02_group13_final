@@ -4,13 +4,20 @@ import 'package:sqflite/sqflite.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/database/note_database.dart';
 import 'package:todoapp/database/tag_database.dart';
+import 'package:todoapp/helper/database.dart';
 import 'package:todoapp/services/note_api_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
 class NoteSyncService {
+  static bool _isActiveSession(String? uid) =>
+      uid != null && DatabaseHelper.isCurrentUser(uid);
+
   static CollectionReference<Map<String, dynamic>> _userNotesCol(String uid) {
-    return FirebaseFirestore.instance.collection('users').doc(uid).collection('notes');
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('notes');
   }
 
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>> listenRealtime(
@@ -19,16 +26,23 @@ class NoteSyncService {
   ) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      final controller = StreamController<QuerySnapshot<Map<String, dynamic>>>();
+      final controller =
+          StreamController<QuerySnapshot<Map<String, dynamic>>>();
       return controller.stream.listen((_) {});
     }
+    final sessionUid = user.uid;
     final col = _userNotesCol(user.uid);
     return col.snapshots(includeMetadataChanges: true).listen((snap) async {
+      if (!_isActiveSession(sessionUid)) return;
       for (final change in snap.docChanges) {
+        if (!_isActiveSession(sessionUid)) return;
         final rid = change.doc.id;
-        
+
         if (change.type == DocumentChangeType.removed) {
-          final rows = await db.rawQuery('select id from notes where remoteId = ?', [rid]);
+          final rows = await db.rawQuery(
+            'select id from notes where remoteId = ?',
+            [rid],
+          );
           if (rows.isNotEmpty) {
             final localId = rows.first['id'] as int;
             await NoteDatabase.deleteNote(db, localId);
@@ -36,15 +50,17 @@ class NoteSyncService {
           }
           continue;
         }
-        
+
         final data = change.doc.data();
         if (data == null) continue;
-        
+
         if (change.doc.metadata.hasPendingWrites) {
           print('[NoteSync] RT skip pending local write rid=$rid');
           continue;
         }
-        final createdAt = DateTime.tryParse(data['createdAt'] as String? ?? '') ?? DateTime.now();
+        final createdAt =
+            DateTime.tryParse(data['createdAt'] as String? ?? '') ??
+            DateTime.now();
         final editedAt = DateTime.tryParse(data['editedAt'] as String? ?? '');
         final pinned = (data['pinned'] == true);
         final title = data['title'] as String?;
@@ -53,17 +69,29 @@ class NoteSyncService {
         final folderId = data['folderId'] as int?;
         final isFavorite = (data['isFavorite'] == true);
         final remoteTagsRaw = data['tags'];
-        final mappedTagIds = await _mapRemoteTagsToLocal(db, remoteTagsRaw is List ? remoteTagsRaw : const []);
+        final mappedTagIds = await _mapRemoteTagsToLocal(
+          db,
+          remoteTagsRaw is List ? remoteTagsRaw : const [],
+        );
 
-        final rows = await db.rawQuery('select id, createdAt, editedAt from notes where remoteId = ?', [rid]);
+        final rows = await db.rawQuery(
+          'select id, createdAt, editedAt from notes where remoteId = ?',
+          [rid],
+        );
         if (rows.isEmpty) {
           final dynamicLocalId = data['localId'];
           if (dynamicLocalId is int) {
-            final existsLocal = await db.rawQuery('select id from notes where id = ?', [dynamicLocalId]);
+            final existsLocal = await db.rawQuery(
+              'select id from notes where id = ?',
+              [dynamicLocalId],
+            );
             if (existsLocal.isNotEmpty) {
               bool isChecklist = (data['isChecklist'] == true);
               if (!isChecklist && content != null) {
-                try { final l = jsonDecode(content); if (l is List) isChecklist = true; } catch (_) {}
+                try {
+                  final l = jsonDecode(content);
+                  if (l is List) isChecklist = true;
+                } catch (_) {}
               }
               await db.update(
                 'notes',
@@ -82,16 +110,36 @@ class NoteSyncService {
                 where: 'id = ?',
                 whereArgs: [dynamicLocalId],
               );
-              await TagDatabase.setTagsForNote(db, dynamicLocalId, mappedTagIds);
-              print('[NoteSync] RT attach remoteId to existing localId=$dynamicLocalId');
+              await TagDatabase.setTagsForNote(
+                db,
+                dynamicLocalId,
+                mappedTagIds,
+              );
+              print(
+                '[NoteSync] RT attach remoteId to existing localId=$dynamicLocalId',
+              );
             } else {
               bool isChecklist = (data['isChecklist'] == true);
               if (!isChecklist && content != null) {
-                try { final l = jsonDecode(content); if (l is List) isChecklist = true; } catch (_) {}
+                try {
+                  final l = jsonDecode(content);
+                  if (l is List) isChecklist = true;
+                } catch (_) {}
               }
               final insertedId = await db.rawInsert(
                 'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [title, content, createdAt.toIso8601String(), editedAt?.toIso8601String(), pinned ? 1 : 0, rid, isChecklist ? 1 : 0, color, folderId, isFavorite ? 1 : 0],
+                [
+                  title,
+                  content,
+                  createdAt.toIso8601String(),
+                  editedAt?.toIso8601String(),
+                  pinned ? 1 : 0,
+                  rid,
+                  isChecklist ? 1 : 0,
+                  color,
+                  folderId,
+                  isFavorite ? 1 : 0,
+                ],
               );
               await TagDatabase.setTagsForNote(db, insertedId, mappedTagIds);
               print('[NoteSync] RT insert new local for remoteId=$rid');
@@ -99,24 +147,46 @@ class NoteSyncService {
           } else {
             bool isChecklist = (data['isChecklist'] == true);
             if (!isChecklist && content != null) {
-              try { final l = jsonDecode(content); if (l is List) isChecklist = true; } catch (_) {}
+              try {
+                final l = jsonDecode(content);
+                if (l is List) isChecklist = true;
+              } catch (_) {}
             }
             final insertedId = await db.rawInsert(
               'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-              [title, content, createdAt.toIso8601String(), editedAt?.toIso8601String(), pinned ? 1 : 0, rid, isChecklist ? 1 : 0, color, folderId, isFavorite ? 1 : 0],
+              [
+                title,
+                content,
+                createdAt.toIso8601String(),
+                editedAt?.toIso8601String(),
+                pinned ? 1 : 0,
+                rid,
+                isChecklist ? 1 : 0,
+                color,
+                folderId,
+                isFavorite ? 1 : 0,
+              ],
             );
             await TagDatabase.setTagsForNote(db, insertedId, mappedTagIds);
-            print('[NoteSync] RT insert new local for remoteId=$rid (no localId)');
+            print(
+              '[NoteSync] RT insert new local for remoteId=$rid (no localId)',
+            );
           }
         } else {
           final localEditedStr = rows.first['editedAt'] as String?;
-          final localEdited = (localEditedStr == null) ? DateTime.fromMillisecondsSinceEpoch(0) : DateTime.tryParse(localEditedStr) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final localEdited = (localEditedStr == null)
+              ? DateTime.fromMillisecondsSinceEpoch(0)
+              : DateTime.tryParse(localEditedStr) ??
+                    DateTime.fromMillisecondsSinceEpoch(0);
           final remoteEdited = editedAt ?? createdAt;
           if (remoteEdited.isAfter(localEdited)) {
             final localId = rows.first['id'] as int;
             bool remoteIsChecklist = (data['isChecklist'] == true);
             if (!remoteIsChecklist && content != null) {
-              try { final l = jsonDecode(content); if (l is List) remoteIsChecklist = true; } catch (_) {}
+              try {
+                final l = jsonDecode(content);
+                if (l is List) remoteIsChecklist = true;
+              } catch (_) {}
             }
             // Giữ lịch sử chia sẻ cục bộ (collaborators / sharedExternally)
             // để đồng bộ realtime không xóa mất.
@@ -142,26 +212,32 @@ class NoteSyncService {
           }
         }
       }
-      onAnyChange();
+      if (_isActiveSession(sessionUid)) onAnyChange();
     });
   }
 
   static Future<void> syncAll(Database db, List<Note> localNotes) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (!_isActiveSession(uid)) {
         print('[NoteSync] skip syncAll: no user');
         return;
       }
 
-      final remoteNotes = await NoteApiService.fetchNotes();
+      final remoteNotes = await NoteApiService.fetchNotes(expectedUserId: uid);
+      if (!_isActiveSession(uid)) return;
       print('[NoteSync] syncAll: remote count=${remoteNotes.length}');
       final remoteNotesMap = {for (var n in remoteNotes) n.remoteId!: n};
-      final localByRemote = {for (var n in localNotes) if (n.remoteId != null) n.remoteId!: n};
+      final localByRemote = {
+        for (var n in localNotes)
+          if (n.remoteId != null) n.remoteId!: n,
+      };
 
       // 1) Upload locals without remoteId
       for (final n in localNotes.where((n) => n.remoteId == null)) {
-        final created = await NoteApiService.createNote(n);
+        if (!_isActiveSession(uid)) return;
+        final created = await NoteApiService.createNote(n, expectedUserId: uid);
+        if (!_isActiveSession(uid)) return;
         if (created != null && created.remoteId != null) {
           print('[NoteSync] uploaded local -> remoteId=${created.remoteId}');
           n.remoteId = created.remoteId;
@@ -171,10 +247,14 @@ class NoteSyncService {
 
       // 2) Download/attach remotes not in local
       for (final remoteNote in remoteNotes) {
+        if (!_isActiveSession(uid)) return;
         final rid = remoteNote.remoteId!;
         if (!localByRemote.containsKey(rid)) {
           final dynamicLocalId = remoteNote.id;
-          final existingLocal = await db.rawQuery('select id from notes where id = ?', [dynamicLocalId]);
+          final existingLocal = await db.rawQuery(
+            'select id from notes where id = ?',
+            [dynamicLocalId],
+          );
           if (existingLocal.isNotEmpty) {
             await db.update(
               'notes',
@@ -193,7 +273,9 @@ class NoteSyncService {
               where: 'id = ?',
               whereArgs: [dynamicLocalId],
             );
-            print('[NoteSync] attach remoteId to existing localId=$dynamicLocalId');
+            print(
+              '[NoteSync] attach remoteId to existing localId=$dynamicLocalId',
+            );
             continue;
           }
 
@@ -216,30 +298,25 @@ class NoteSyncService {
         }
       }
 
-      // 3) Delete local notes that no longer exist on remote
-      final remoteIds = remoteNotesMap.keys.toSet();
+      // 3) Resolve conflicts simple: newer editedAt wins. A missing remote
+      // document never implicitly deletes a local note: it can simply be an
+      // offline or not-yet-uploaded change.
       for (final n in localNotes.where((n) => n.remoteId != null)) {
-        if (!remoteIds.contains(n.remoteId)) {
-          await NoteDatabase.deleteNote(db, n.id);
-          print('[NoteSync] deleted local note (missing on remote) localId=${n.id} remoteId=${n.remoteId}');
-        }
-      }
-
-      // 4) Resolve conflicts simple: newer editedAt wins
-      for (final n in localNotes.where((n) => n.remoteId != null)) {
+        if (!_isActiveSession(uid)) return;
         final rn = remoteNotesMap[n.remoteId];
         if (rn == null) continue;
         final remoteEdited = rn.editedAt ?? rn.createdAt;
         final localEdited = n.editedAt ?? n.createdAt;
         if (localEdited.isAfter(remoteEdited)) {
-          await NoteApiService.updateNote(n);
+          await NoteApiService.updateNote(n, expectedUserId: uid);
           print('[NoteSync] pushed newer local -> remoteId=${n.remoteId}');
         } else if (remoteEdited.isAfter(localEdited)) {
           // Giữ lịch sử chia sẻ cục bộ nếu bản remote không mang theo.
           final merged = rn.copyWith(
             id: n.id,
-            collaborators:
-                rn.collaborators.isNotEmpty ? rn.collaborators : n.collaborators,
+            collaborators: rn.collaborators.isNotEmpty
+                ? rn.collaborators
+                : n.collaborators,
             sharedExternally: rn.sharedExternally || n.sharedExternally,
           );
           await NoteDatabase.updateNote(db, merged);
@@ -259,15 +336,20 @@ class NoteSyncService {
     if (_pushing.contains(note.id)) return;
     _pushing.add(note.id);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (!_isActiveSession(uid)) return;
       // Kiểm tra lại DB phòng khi remoteId vừa được luồng khác gán.
       final fresh = await NoteDatabase.getNote(db, note.id);
+      if (!_isActiveSession(uid)) return;
       if (fresh.remoteId != null) {
         note.remoteId = fresh.remoteId;
         return;
       }
-      final created = await NoteApiService.createNote(note);
+      final created = await NoteApiService.createNote(
+        note,
+        expectedUserId: uid,
+      );
+      if (!_isActiveSession(uid)) return;
       if (created != null && created.remoteId != null) {
         note.remoteId = created.remoteId;
         await NoteDatabase.updateNote(db, note);
@@ -282,9 +364,9 @@ class NoteSyncService {
 
   static Future<void> pushUpdated(Note note) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null || note.remoteId == null) return;
-      await NoteApiService.updateNote(note);
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (!_isActiveSession(uid) || note.remoteId == null) return;
+      await NoteApiService.updateNote(note, expectedUserId: uid);
       print('[NoteSync] pushUpdated -> remoteId=${note.remoteId}');
     } catch (e) {
       print('[NoteSync] pushUpdated error: $e');
@@ -293,9 +375,9 @@ class NoteSyncService {
 
   static Future<void> pushDeleted(Note note) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null || note.remoteId == null) return;
-      await NoteApiService.deleteNote(note.remoteId!);
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (!_isActiveSession(uid) || note.remoteId == null) return;
+      await NoteApiService.deleteNote(note.remoteId!, expectedUserId: uid);
       print('[NoteSync] pushDeleted -> remoteId=${note.remoteId}');
     } catch (e) {
       print('[NoteSync] pushDeleted error: $e');
@@ -306,14 +388,22 @@ class NoteSyncService {
     // Keep tag sync logic local or simple for now
   }
 
-  static Future<List<int>> _mapRemoteTagsToLocal(Database db, Iterable<dynamic> remoteIds) async {
-    final ids = remoteIds.whereType<String>().where((e) => e.isNotEmpty).toList();
+  static Future<List<int>> _mapRemoteTagsToLocal(
+    Database db,
+    Iterable<dynamic> remoteIds,
+  ) async {
+    final ids = remoteIds
+        .whereType<String>()
+        .where((e) => e.isNotEmpty)
+        .toList();
     if (ids.isEmpty) return const [];
     final placeholders = List.filled(ids.length, '?').join(',');
-    final rows = await db.rawQuery('SELECT id, remoteId FROM tags WHERE remoteId IN ($placeholders)', ids);
+    final rows = await db.rawQuery(
+      'SELECT id, remoteId FROM tags WHERE remoteId IN ($placeholders)',
+      ids,
+    );
     final Map<String, int> localByRemote = {
-      for (final row in rows)
-        row['remoteId'] as String: row['id'] as int,
+      for (final row in rows) row['remoteId'] as String: row['id'] as int,
     };
     final result = <int>[];
     for (final rid in ids) {

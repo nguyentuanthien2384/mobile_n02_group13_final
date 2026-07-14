@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:todoapp/helper/note_search.dart';
 
 class Note {
   final int id;
@@ -24,6 +25,9 @@ class Note {
   int commentsCount;
   bool archived;
   bool deleted;
+  DateTime? deletedAt;
+  String reminderRepeat;
+  int reminderLeadMinutes;
   String? ownerUid;
   String? ownerName;
   String? sharePermission;
@@ -56,6 +60,9 @@ class Note {
     this.commentsCount = 0,
     this.archived = false,
     this.deleted = false,
+    this.deletedAt,
+    this.reminderRepeat = 'none',
+    this.reminderLeadMinutes = 0,
     this.ownerUid,
     this.ownerName,
     this.sharePermission,
@@ -85,6 +92,12 @@ class Note {
       'imagePath': imagePath,
       'collaborators': jsonEncode(collaborators),
       'sharedExternally': sharedExternally ? 1 : 0,
+      'archived': archived ? 1 : 0,
+      'deleted': deleted ? 1 : 0,
+      'deletedAt': deletedAt?.toIso8601String(),
+      'reminderAt': reminderAt?.toIso8601String(),
+      'reminderRepeat': reminderRepeat,
+      'reminderLeadMinutes': reminderLeadMinutes,
     };
   }
 
@@ -109,6 +122,9 @@ class Note {
     int? commentsCount,
     bool? archived,
     bool? deleted,
+    DateTime? deletedAt,
+    String? reminderRepeat,
+    int? reminderLeadMinutes,
     String? ownerUid,
     String? ownerName,
     String? sharePermission,
@@ -140,6 +156,9 @@ class Note {
       commentsCount: commentsCount ?? this.commentsCount,
       archived: archived ?? this.archived,
       deleted: deleted ?? this.deleted,
+      deletedAt: deletedAt ?? this.deletedAt,
+      reminderRepeat: reminderRepeat ?? this.reminderRepeat,
+      reminderLeadMinutes: reminderLeadMinutes ?? this.reminderLeadMinutes,
       ownerUid: ownerUid ?? this.ownerUid,
       ownerName: ownerName ?? this.ownerName,
       sharePermission: sharePermission ?? this.sharePermission,
@@ -292,13 +311,13 @@ class NoteProvider extends ChangeNotifier {
       _notes.where((n) => !_pinnedNoteIds.contains(n.id)).toList();
 
   List<Note> search(String query) {
-    final txt = query.trim().toLowerCase();
-    if (txt.isEmpty) return List<Note>.from(_notes);
     return _notes
         .where(
-          (n) =>
-              ((n.title ?? '').toLowerCase().contains(txt) ||
-              (n.content ?? '').toLowerCase().contains(txt)),
+          (n) => matchesNoteSearch(
+            query: query,
+            title: n.title,
+            content: n.content,
+          ),
         )
         .toList();
   }

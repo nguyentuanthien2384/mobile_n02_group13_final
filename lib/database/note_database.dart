@@ -23,11 +23,10 @@ class NoteDatabase {
     if (note.tagIds.isNotEmpty) {
       final batch = db.batch();
       for (final tagId in note.tagIds) {
-        batch.insert(
-          'note_tags',
-          {'noteId': id, 'tagId': tagId},
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        batch.insert('note_tags', {
+          'noteId': id,
+          'tagId': tagId,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
       await batch.commit(noResult: true);
     }
@@ -47,11 +46,15 @@ class NoteDatabase {
       title: e['title'] as String?,
       content: e['content'] as String?,
       createdAt: DateTime.parse(e['createdAt'] as String),
-      editedAt: (e['editedAt'] == null) ? null : DateTime.tryParse(e['editedAt'] as String),
+      editedAt: (e['editedAt'] == null)
+          ? null
+          : DateTime.tryParse(e['editedAt'] as String),
       pinned: ((e['pinned'] ?? 0) as int) == 1,
       remoteId: e['remoteId'] as String?,
       isChecklist: ((e['isChecklist'] ?? 0) as int) == 1,
-      reminderAt: (e['reminderAt'] == null) ? null : DateTime.tryParse(e['reminderAt'] as String),
+      reminderAt: (e['reminderAt'] == null)
+          ? null
+          : DateTime.tryParse(e['reminderAt'] as String),
       tagIds: noteTagMap[e['id'] as int] ?? const <int>[],
       color: (e['color'] as int?) ?? 0,
       folderId: e['folderId'] as int?,
@@ -61,6 +64,13 @@ class NoteDatabase {
       imagePath: e['imagePath'] as String?,
       collaborators: _decodeCollaborators(e['collaborators']),
       sharedExternally: ((e['sharedExternally'] ?? 0) as int) == 1,
+      archived: ((e['archived'] ?? 0) as int) == 1,
+      deleted: ((e['deleted'] ?? 0) as int) == 1,
+      deletedAt: e['deletedAt'] == null
+          ? null
+          : DateTime.tryParse(e['deletedAt'] as String),
+      reminderRepeat: (e['reminderRepeat'] as String?) ?? 'none',
+      reminderLeadMinutes: (e['reminderLeadMinutes'] as int?) ?? 0,
     );
   }
 
@@ -77,7 +87,10 @@ class NoteDatabase {
 
   /// Active notes only (excludes notes moved to trash).
   static Future<List<Note>> getNotes(Database db) async {
-    final noteMaps = await db.query('notes', where: 'deleted = 0');
+    final noteMaps = await db.query(
+      'notes',
+      where: 'deleted = 0 AND archived = 0',
+    );
     final noteTagMap = await _noteTagMap(db);
     return noteMaps.map((e) => _fromRow(e, noteTagMap)).toList();
   }
@@ -90,8 +103,14 @@ class NoteDatabase {
   }
 
   static Future<Note> getNote(Database db, int id) async {
-    final noteInfo = await db.rawQuery('select * from notes where id = ?', [id]);
-    final tagRows = await db.query('note_tags', where: 'noteId = ?', whereArgs: [id]);
+    final noteInfo = await db.rawQuery('select * from notes where id = ?', [
+      id,
+    ]);
+    final tagRows = await db.query(
+      'note_tags',
+      where: 'noteId = ?',
+      whereArgs: [id],
+    );
     final tagIds = tagRows.map((e) => e['tagId'] as int).toList();
 
     return Note(
@@ -99,11 +118,15 @@ class NoteDatabase {
       title: noteInfo.first['title'] as String?,
       content: noteInfo.first['content'] as String?,
       createdAt: DateTime.parse(noteInfo.first['createdAt'] as String),
-      editedAt: (noteInfo.first['editedAt'] == null) ? null : DateTime.tryParse(noteInfo.first['editedAt'] as String),
+      editedAt: (noteInfo.first['editedAt'] == null)
+          ? null
+          : DateTime.tryParse(noteInfo.first['editedAt'] as String),
       pinned: ((noteInfo.first['pinned'] ?? 0) as int) == 1,
       remoteId: noteInfo.first['remoteId'] as String?,
       isChecklist: ((noteInfo.first['isChecklist'] ?? 0) as int) == 1,
-      reminderAt: (noteInfo.first['reminderAt'] == null) ? null : DateTime.tryParse(noteInfo.first['reminderAt'] as String),
+      reminderAt: (noteInfo.first['reminderAt'] == null)
+          ? null
+          : DateTime.tryParse(noteInfo.first['reminderAt'] as String),
       tagIds: tagIds,
       color: (noteInfo.first['color'] as int?) ?? 0,
       folderId: noteInfo.first['folderId'] as int?,
@@ -113,6 +136,13 @@ class NoteDatabase {
       imagePath: noteInfo.first['imagePath'] as String?,
       collaborators: _decodeCollaborators(noteInfo.first['collaborators']),
       sharedExternally: ((noteInfo.first['sharedExternally'] ?? 0) as int) == 1,
+      archived: ((noteInfo.first['archived'] ?? 0) as int) == 1,
+      deleted: ((noteInfo.first['deleted'] ?? 0) as int) == 1,
+      deletedAt: noteInfo.first['deletedAt'] == null
+          ? null
+          : DateTime.tryParse(noteInfo.first['deletedAt'] as String),
+      reminderRepeat: (noteInfo.first['reminderRepeat'] as String?) ?? 'none',
+      reminderLeadMinutes: (noteInfo.first['reminderLeadMinutes'] as int?) ?? 0,
     );
   }
 
@@ -135,7 +165,12 @@ class NoteDatabase {
   static Future<void> softDelete(Database db, int id) async {
     await db.update(
       'notes',
-      {'deleted': 1, 'remoteId': null, 'reminderAt': null},
+      {
+        'deleted': 1,
+        'deletedAt': DateTime.now().toIso8601String(),
+        'remoteId': null,
+        'reminderAt': null,
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -145,7 +180,7 @@ class NoteDatabase {
   static Future<void> restore(Database db, int id) async {
     await db.update(
       'notes',
-      {'deleted': 0},
+      {'deleted': 0, 'deletedAt': null},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -158,5 +193,36 @@ class NoteDatabase {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  static Future<List<Note>> getArchivedNotes(Database db) async {
+    final noteMaps = await db.query(
+      'notes',
+      where: 'deleted = 0 AND archived = 1',
+    );
+    final noteTagMap = await _noteTagMap(db);
+    return noteMaps.map((e) => _fromRow(e, noteTagMap)).toList();
+  }
+
+  static Future<void> setArchived(Database db, int id, bool archived) async {
+    await db.update(
+      'notes',
+      {'archived': archived ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  static Future<int> purgeExpiredTrash(Database db) async {
+    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    final expired = await db.query(
+      'notes',
+      where: 'deleted = 1 AND deletedAt IS NOT NULL AND deletedAt < ?',
+      whereArgs: [cutoff.toIso8601String()],
+    );
+    for (final note in expired) {
+      await deleteNote(db, note['id'] as int);
+    }
+    return expired.length;
   }
 }

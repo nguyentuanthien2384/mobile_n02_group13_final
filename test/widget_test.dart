@@ -6,9 +6,22 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:todoapp/helper/note_search.dart';
 
 void main() {
   test('sanity check', () {
     expect(1 + 1, 2);
   });
+
+  test(
+    'note search accepts partial, unaccented and reordered Vietnamese words',
+    () {
+      const title = 'Kế hoạch học tập';
+
+      expect(matchesNoteSearch(query: 'ke hoach', title: title), isTrue);
+      expect(matchesNoteSearch(query: 'tap hoc', title: title), isTrue);
+      expect(matchesNoteSearch(query: 'hoac', title: title), isTrue);
+      expect(matchesNoteSearch(query: 'du lich', title: title), isFalse);
+    },
+  );
 }

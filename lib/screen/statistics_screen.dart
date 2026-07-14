@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:todoapp/class/note.dart';
 import 'package:todoapp/database/note_database.dart';
+import 'package:todoapp/database/folder_database.dart';
 import 'package:todoapp/helper/database.dart';
+import 'package:todoapp/provider/folder_provider.dart';
 import 'package:todoapp/provider/tag_provider.dart';
 import 'package:todoapp/helper/note_text.dart';
 
@@ -26,8 +28,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     try {
       final db = await DatabaseHelper.database();
       final notes = await NoteDatabase.getNotes(db);
+      final folders = await FolderDatabase.getFolders(db);
       if (!mounted) return;
       Provider.of<NoteProvider>(context, listen: false).setNotes(notes);
+      Provider.of<FolderProvider>(context, listen: false).setFolders(folders);
     } catch (_) {}
   }
 
@@ -37,6 +41,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     // watch → tự cập nhật ngay khi NoteProvider/TagProvider thay đổi.
     final notes = context.watch<NoteProvider>().notes;
     final tags = context.watch<TagProvider>().tags;
+    final folders = context.watch<FolderProvider>().folders;
 
     final total = notes.length;
     final pinned = notes.where((n) => n.pinned).length;
@@ -54,8 +59,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     final now = DateTime.now();
     final last7 = notes
-        .where((n) => (n.editedAt ?? n.createdAt)
-            .isAfter(now.subtract(const Duration(days: 7))))
+        .where(
+          (n) => (n.editedAt ?? n.createdAt).isAfter(
+            now.subtract(const Duration(days: 7)),
+          ),
+        )
         .length;
 
     final progress = checklistItems == 0 ? 0.0 : checklistDone / checklistItems;
@@ -76,117 +84,148 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('Overview',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.5,
-            children: [
-              _StatCard(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              'Overview',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.5,
+              children: [
+                _StatCard(
                   icon: Icons.sticky_note_2_outlined,
                   label: 'Total notes',
                   value: '$total',
-                  color: Colors.blue),
-              _StatCard(
+                  color: Colors.blue,
+                ),
+                _StatCard(
                   icon: Icons.notes,
                   label: 'Text notes',
                   value: '$textNotes',
-                  color: Colors.teal),
-              _StatCard(
+                  color: Colors.teal,
+                ),
+                _StatCard(
                   icon: Icons.checklist,
                   label: 'Checklists',
                   value: '${checklistNotes.length}',
-                  color: Colors.deepPurple),
-              _StatCard(
+                  color: Colors.deepPurple,
+                ),
+                _StatCard(
                   icon: Icons.push_pin_outlined,
                   label: 'Pinned',
                   value: '$pinned',
-                  color: Colors.orange),
-              _StatCard(
+                  color: Colors.orange,
+                ),
+                _StatCard(
                   icon: Icons.label_outline,
                   label: 'Tags',
                   value: '${tags.length}',
-                  color: Colors.green),
-              _StatCard(
+                  color: Colors.green,
+                ),
+                _StatCard(
+                  icon: Icons.folder_outlined,
+                  label: 'Folders',
+                  value: '${folders.length}',
+                  color: Colors.indigo,
+                ),
+                _StatCard(
                   icon: Icons.alarm,
                   label: 'Reminders',
                   value: '$withReminder',
-                  color: Colors.redAccent),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text('Checklist progress',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('$checklistDone / $checklistItems done',
-                          style: theme.textTheme.bodyLarge),
-                      Text('${(progress * 100).toStringAsFixed(0)}%',
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 10,
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                    ),
-                  ),
-                ],
+                  color: Colors.redAccent,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Checklist progress',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.update),
-              title: const Text('Edited in last 7 days'),
-              trailing: Text('$last7',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold)),
-            ),
-          ),
-          if (tags.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Text('Notes per tag',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            ...tags.map(
-              (t) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.label),
-                  title: Text(t.name),
-                  trailing: Text(
-                      '${notes.where((n) => n.tagIds.contains(t.id)).length}',
-                      style: theme.textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '$checklistDone / $checklistItems done',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                        Text(
+                          '${(progress * 100).toStringAsFixed(0)}%',
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 10,
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+            const SizedBox(height: 20),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.update),
+                title: const Text('Edited in last 7 days'),
+                trailing: Text(
+                  '$last7',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Notes per tag',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...tags.map(
+                (t) => Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.label),
+                    title: Text(t.name),
+                    trailing: Text(
+                      '${notes.where((n) => n.tagIds.contains(t.id)).length}',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -217,12 +256,18 @@ class _StatCard extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 28),
             const Spacer(),
-            Text(value,
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            Text(label,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline)),
+            Text(
+              value,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
           ],
         ),
       ),

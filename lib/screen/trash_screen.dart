@@ -28,6 +28,7 @@ class _TrashScreenState extends State<TrashScreen> {
   Future<void> _init() async {
     final db = await DatabaseHelper.database();
     _db = db;
+    await NoteDatabase.purgeExpiredTrash(db);
     await _reload();
   }
 
@@ -56,9 +57,9 @@ class _TrashScreenState extends State<TrashScreen> {
     } catch (_) {}
     await _reload();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note restored')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Note restored')));
     }
   }
 
@@ -72,8 +73,9 @@ class _TrashScreenState extends State<TrashScreen> {
         content: const Text('This note will be removed for good.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -96,8 +98,9 @@ class _TrashScreenState extends State<TrashScreen> {
         content: Text('${_notes.length} note(s) will be permanently deleted.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Empty', style: TextStyle(color: Colors.red)),
@@ -132,60 +135,73 @@ class _TrashScreenState extends State<TrashScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _notes.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.delete_outline,
-                          size: 64, color: theme.colorScheme.outline),
-                      const SizedBox(height: 12),
-                      Text('Trash is empty',
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(color: theme.colorScheme.outline)),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.delete_outline,
+                    size: 64,
+                    color: theme.colorScheme.outline,
                   ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _notes.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final note = _notes[index];
-                    final preview = noteContentToPlainText(note);
-                    return Card(
-                      child: ListTile(
-                        title: Text(
-                          (note.title?.isNotEmpty ?? false)
-                              ? note.title!
-                              : (preview.isEmpty ? '(empty note)' : preview),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 12),
+                  Text(
+                    'Trash is empty',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: _notes.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final note = _notes[index];
+                final preview = noteContentToPlainText(note);
+                return Card(
+                  child: ListTile(
+                    title: Text(
+                      (note.title?.isNotEmpty ?? false)
+                          ? note.title!
+                          : (preview.isEmpty ? '(empty note)' : preview),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: preview.isEmpty
+                        ? null
+                        : Text(
+                            preview,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Restore',
+                          icon: const Icon(
+                            Icons.restore_from_trash,
+                            color: Colors.green,
+                          ),
+                          onPressed: () => _restore(note),
                         ),
-                        subtitle: preview.isEmpty
-                            ? null
-                            : Text(preview,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Restore',
-                              icon: const Icon(Icons.restore_from_trash,
-                                  color: Colors.green),
-                              onPressed: () => _restore(note),
-                            ),
-                            IconButton(
-                              tooltip: 'Delete forever',
-                              icon: const Icon(Icons.delete_forever,
-                                  color: Colors.red),
-                              onPressed: () => _deleteForever(note),
-                            ),
-                          ],
+                        IconButton(
+                          tooltip: 'Delete forever',
+                          icon: const Icon(
+                            Icons.delete_forever,
+                            color: Colors.red,
+                          ),
+                          onPressed: () => _deleteForever(note),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }

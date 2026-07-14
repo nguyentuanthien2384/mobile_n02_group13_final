@@ -5,9 +5,12 @@ import 'package:todoapp/class/note.dart';
 import 'api_service.dart';
 
 class NoteApiService {
-  static Future<List<Note>> fetchNotes() async {
+  static Future<List<Note>> fetchNotes({String? expectedUserId}) async {
     try {
-      final res = await ApiService.get('/notes');
+      final res = await ApiService.get(
+        '/notes',
+        expectedUserId: expectedUserId,
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final List list = data['notes'] ?? [];
@@ -39,13 +42,17 @@ class NoteApiService {
     }
   }
 
-  static Future<Note?> createNote(Note note) async {
+  static Future<Note?> createNote(Note note, {String? expectedUserId}) async {
     try {
       final body = note.toMap();
       body['localId'] = note.id;
       // We don't send tagIds directly as tags in Firestore is List<String> of remote tag IDs
       // But we will handle tag synchronization separately or during syncAll.
-      final res = await ApiService.post('/notes', body);
+      final res = await ApiService.post(
+        '/notes',
+        body,
+        expectedUserId: expectedUserId,
+      );
       if (res.statusCode == 201) {
         final data = jsonDecode(res.body);
         return _parseNoteJson(data);
@@ -57,12 +64,16 @@ class NoteApiService {
     }
   }
 
-  static Future<Note?> updateNote(Note note) async {
+  static Future<Note?> updateNote(Note note, {String? expectedUserId}) async {
     if (note.remoteId == null) return null;
     try {
       final body = note.toMap();
       body['localId'] = note.id;
-      final res = await ApiService.put('/notes/${note.remoteId}', body);
+      final res = await ApiService.put(
+        '/notes/${note.remoteId}',
+        body,
+        expectedUserId: expectedUserId,
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         return _parseNoteJson(data);
@@ -74,9 +85,15 @@ class NoteApiService {
     }
   }
 
-  static Future<bool> deleteNote(String remoteId) async {
+  static Future<bool> deleteNote(
+    String remoteId, {
+    String? expectedUserId,
+  }) async {
     try {
-      final res = await ApiService.delete('/notes/$remoteId');
+      final res = await ApiService.delete(
+        '/notes/$remoteId',
+        expectedUserId: expectedUserId,
+      );
       return res.statusCode == 200;
     } catch (e) {
       print('[NoteApiService] deleteNote error: $e');

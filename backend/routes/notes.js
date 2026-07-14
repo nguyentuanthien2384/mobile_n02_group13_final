@@ -19,6 +19,16 @@ const PAGE = (req, def = 30, cap = 100) =>
 
 const notesCol = (db, uid) => db.collection('users').doc(uid).collection('notes');
 
+// Owner-only by default; invited users and published posts are the only
+// exceptions. This prevents a forged ownerUid from exposing private data.
+async function canAccessNote(db, ownerUid, noteId, viewerUid) {
+  const noteRef = notesCol(db, ownerUid).doc(noteId);
+  const noteDoc = await noteRef.get();
+  if (!noteDoc.exists || noteDoc.data().deleted) return false;
+  if (ownerUid === viewerUid || noteDoc.data().isPublished) return true;
+  return (await noteRef.collection('shares').doc(viewerUid).get()).exists;
+}
+
 // ════════════════════════════════════════════════════════════
 //  COLLECTION-LEVEL ROUTES  (must precede "/:id")
 // ════════════════════════════════════════════════════════════
@@ -189,6 +199,9 @@ router.post('/', rateLimit({ key: 'note-write', max: 120 }), async (req, res) =>
     const b = req.body;
     const now = new Date().toISOString();
     const payload = {
+      // Never accept an owner from the client. The authenticated uid is the
+      // authoritative owner even if a request body is tampered with.
+      ownerUid: uid,
       title: b.title || '',
       content: b.content || '',
       createdAt: now,
@@ -685,6 +698,9 @@ router.get('/:id/comments', async (req, res) => {
     const ownerUid = req.query.ownerUid || req.user.uid;
     const me = req.user.uid;
     const noteRef = notesCol(db, ownerUid).doc(req.params.id);
+    if (!(await canAccessNote(db, ownerUid, req.params.id, me))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     const snap = await noteRef.collection('comments').orderBy('createdAt', 'asc').get();
     const comments = [];
     for (const d of snap.docs) {
@@ -711,6 +727,10 @@ router.post('/:id/comments', rateLimit({ key: 'comment', max: 60 }), async (req,
     const noteRef = notesCol(db, ownerUid).doc(req.params.id);
     const noteDoc = await noteRef.get();
     if (!noteDoc.exists) return res.status(404).json({ error: 'Không tìm thấy ghi chú' });
+
+    if (!(await canAccessNote(db, ownerUid, req.params.id, uid))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
 
     const comment = {
       userId: uid,
@@ -765,6 +785,9 @@ router.put('/:id/comments/:cid', async (req, res) => {
     const ownerUid = req.query.ownerUid || req.user.uid;
     const { text } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: 'Nội dung không được trống' });
+    if (!(await canAccessNote(db, ownerUid, req.params.id, req.user.uid))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     const cRef = notesCol(db, ownerUid).doc(req.params.id).collection('comments').doc(req.params.cid);
     const cDoc = await cRef.get();
     if (!cDoc.exists) return res.status(404).json({ error: 'Không tìm thấy bình luận' });
@@ -782,6 +805,9 @@ router.delete('/:id/comments/:cid', async (req, res) => {
     const db = getFirestore();
     const ownerUid = req.query.ownerUid || req.user.uid;
     const noteRef = notesCol(db, ownerUid).doc(req.params.id);
+    if (!(await canAccessNote(db, ownerUid, req.params.id, req.user.uid))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     const cRef = noteRef.collection('comments').doc(req.params.cid);
     const cDoc = await cRef.get();
     if (!cDoc.exists) return res.status(404).json({ error: 'Không tìm thấy bình luận' });
@@ -804,6 +830,9 @@ router.post('/:id/comments/:cid/like', async (req, res) => {
     const db = getFirestore();
     const me = req.user.uid;
     const ownerUid = req.query.ownerUid || req.user.uid;
+    if (!(await canAccessNote(db, ownerUid, req.params.id, me))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     const cRef = notesCol(db, ownerUid).doc(req.params.id).collection('comments').doc(req.params.cid);
     if (!(await cRef.get()).exists) return res.status(404).json({ error: 'Không tìm thấy bình luận' });
     const likeRef = cRef.collection('likes').doc(me);

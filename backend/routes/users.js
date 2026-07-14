@@ -47,7 +47,10 @@ router.put('/profile', async (req, res) => {
     const uid = req.user.uid;
     const { displayName, bio, settings } = req.body;
     const updates = {};
-    if (displayName !== undefined) updates.displayName = displayName;
+    if (displayName !== undefined) {
+      updates.displayName = displayName.trim();
+      updates.displayNameLower = updates.displayName.toLowerCase();
+    }
     if (bio !== undefined) updates.bio = bio;
     if (settings !== undefined) updates.settings = settings;
 

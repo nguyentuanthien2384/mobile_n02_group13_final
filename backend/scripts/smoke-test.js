@@ -50,6 +50,18 @@ async function api(tok, method, path, body) {
   const note2 = r.data.id;
   r = await api(ALICE, 'GET', '/notes');
   ok(r.data.notes.length === 2, 'Alice lists 2 active notes', r.data.notes.length);
+  r = await api(BOB, 'GET', '/notes');
+  ok(r.status === 200 && r.data.notes.length === 0, 'Bob cannot see Alice private notes');
+  r = await api(BOB, 'GET', `/notes/${note1}`);
+  ok(r.status === 404, 'Bob cannot fetch Alice private note by ID');
+  r = await api(BOB, 'GET', `/notes/${note1}/comments?ownerUid=alice`);
+  ok(r.status === 403, 'Bob cannot read private-note comments with forged ownerUid');
+  r = await api(ALICE, 'POST', `/notes/${note1}/share`, {
+    email: 'bob@example.com', permission: 'view',
+  });
+  ok(r.status === 200, 'Alice shares note1 with Bob');
+  r = await api(BOB, 'GET', '/notes/shared');
+  ok(r.data.notes.some((n) => n.id === note1), 'Bob sees only the explicitly shared note');
   r = await api(ALICE, 'GET', '/notes/search?q=flutter');
   ok(r.data.notes.length === 1, 'Full-text search finds 1', r.data.notes.length);
 
