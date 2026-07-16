@@ -43,7 +43,8 @@ class _ShareDialogState extends State<ShareDialog> {
       final db = await DatabaseHelper.database();
       final fresh = await NoteDatabase.getNote(db, localNote.id);
       if (fresh.remoteId == null) {
-        await NoteSyncService.pushAdded(db, fresh); // gán remoteId vào DB + object
+        final uploaded = await NoteSyncService.pushAdded(db, fresh);
+        if (!uploaded) return null;
       }
       final after = await NoteDatabase.getNote(db, localNote.id);
       _remoteId = after.remoteId;
@@ -78,28 +79,22 @@ class _ShareDialogState extends State<ShareDialog> {
     final email = _emailController.text.trim();
     if (email.isEmpty) return;
     if (!email.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email không hợp lệ')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Email không hợp lệ')));
       return;
     }
 
     setState(() => _isSharing = true);
 
-    // 1) Ghi nhận cục bộ (hiển thị ở tab "Tôi đã chia sẻ" ngay cả khi offline).
-    if (widget.note != null && !_sharedEmails.contains(email)) {
-      _sharedEmails.add(email);
-      await _persistCollaborators();
-    }
-
-    // 2) Đồng bộ ghi chú lên máy chủ (nếu chưa) rồi gọi backend chia sẻ.
+    // Upload the note first. A local email marker is not a successful share.
     final remoteId = await _ensureSynced();
     String message;
     bool delivered = false;
     if (remoteId == null) {
       message =
-          'Đã lưu vào máy, nhưng chưa đồng bộ được lên máy chủ nên người nhận '
-          'chưa xem được. Kiểm tra bạn đã đăng nhập và máy chủ đang chạy.';
+          'Chưa thể tải ghi chú lên máy chủ nên chưa gửi chia sẻ. '
+          'Kiểm tra Cài đặt > Đường dẫn API và kết nối mạng, rồi thử lại.';
     } else {
       try {
         final res = await NoteApiService.shareNote(
@@ -109,6 +104,10 @@ class _ShareDialogState extends State<ShareDialog> {
         );
         if (res != null) {
           delivered = true;
+          if (widget.note != null && !_sharedEmails.contains(email)) {
+            _sharedEmails.add(email);
+            await _persistCollaborators();
+          }
           message =
               'Đã gửi tới $email. Người nhận đăng nhập rồi mở tab "Được chia sẻ với tôi" để xem.';
         } else {
@@ -146,8 +145,10 @@ class _ShareDialogState extends State<ShareDialog> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text(
-                    'Chưa đồng bộ được ghi chú lên máy chủ. Kiểm tra đăng nhập và máy chủ.')),
+              content: Text(
+                'Chưa đồng bộ được ghi chú lên máy chủ. Kiểm tra đăng nhập và máy chủ.',
+              ),
+            ),
           );
         }
         return;
@@ -163,7 +164,8 @@ class _ShareDialogState extends State<ShareDialog> {
         });
         if (widget.note != null) await markNoteShared(context, widget.note!);
       }
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       if (mounted) {
         setState(() {
           _isGeneratingLink = false;
@@ -194,7 +196,7 @@ class _ShareDialogState extends State<ShareDialog> {
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
-                )
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -212,9 +214,13 @@ class _ShareDialogState extends State<ShareDialog> {
                     decoration: InputDecoration(
                       hintText: 'Nhập email người dùng...',
                       hintStyle: const TextStyle(fontSize: 13),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.3),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
@@ -245,11 +251,17 @@ class _ShareDialogState extends State<ShareDialog> {
               child: ElevatedButton.icon(
                 onPressed: _isSharing ? null : _shareWithUser,
                 icon: _isSharing
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.send_rounded),
                 label: const Text('Chia sẻ'),
                 style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
@@ -264,12 +276,14 @@ class _ShareDialogState extends State<ShareDialog> {
                 spacing: 6,
                 runSpacing: 6,
                 children: _sharedEmails
-                    .map((e) => Chip(
-                          label: Text(e, style: const TextStyle(fontSize: 12)),
-                          onDeleted: () => _removeCollaborator(e),
-                          deleteIcon: const Icon(Icons.close, size: 16),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ))
+                    .map(
+                      (e) => Chip(
+                        label: Text(e, style: const TextStyle(fontSize: 12)),
+                        onDeleted: () => _removeCollaborator(e),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    )
                     .toList(),
               ),
             ],
@@ -284,7 +298,9 @@ class _ShareDialogState extends State<ShareDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.3,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -294,7 +310,10 @@ class _ShareDialogState extends State<ShareDialog> {
                           _publicLink!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: Colors.blue),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -302,10 +321,14 @@ class _ShareDialogState extends State<ShareDialog> {
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: _publicLink!));
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Đã sao chép liên kết vào bộ nhớ tạm')),
+                            const SnackBar(
+                              content: Text(
+                                'Đã sao chép liên kết vào bộ nhớ tạm',
+                              ),
+                            ),
                           );
                         },
-                      )
+                      ),
                     ],
                   ),
                 )
@@ -315,11 +338,17 @@ class _ShareDialogState extends State<ShareDialog> {
                   child: OutlinedButton.icon(
                     onPressed: _isGeneratingLink ? null : _generatePublicLink,
                     icon: _isGeneratingLink
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.link),
                     label: const Text('Tạo liên kết công khai'),
                     style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
@@ -342,7 +371,9 @@ class _ShareDialogState extends State<ShareDialog> {
                   icon: const Icon(Icons.ios_share),
                   label: const Text('Chia sẻ (Zalo, Messenger, Gmail...)'),
                   style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),

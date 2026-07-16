@@ -1,15 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:provider/provider.dart';
-import 'package:todoapp/helper/database.dart';
 import 'package:todoapp/database/note_database.dart';
-import 'package:todoapp/database/tag_database.dart';
-import 'package:todoapp/sync/note_sync.dart';
-import 'package:todoapp/sync/tag_sync.dart';
-import 'package:todoapp/class/note.dart';
-import 'package:todoapp/provider/tag_provider.dart';
-import 'dart:math';
+import 'package:todoapp/helper/database.dart';
+import 'package:todoapp/helper/note_search.dart';
 
 class PerformanceTestScreen extends StatefulWidget {
   const PerformanceTestScreen({super.key});
@@ -19,375 +11,239 @@ class PerformanceTestScreen extends StatefulWidget {
 }
 
 class _PerformanceTestScreenState extends State<PerformanceTestScreen> {
-  bool _isRunning = false;
-  String _status = 'Ready';
-  int _notesCreated = 0;
-  int _tagsCreated = 0;
-  String _error = '';
+  bool _running = false;
+  _PerformanceResult? _result;
+  String? _error;
 
-  String? _targetUid;
-  
-  @override
-  void initState() {
-    super.initState();
-    // Use current user's UID, or fallback to the hardcoded UID
-    final user = FirebaseAuth.instance.currentUser;
-    _targetUid = user?.uid ?? '9GPp05z3d6e3K0RB5yx0JG5VVYF2';
-  }
-  final int _noteCount = 1000;
-  final int _tagCount = 100;
-
-  final Random _random = Random();
-  final List<String> _sampleTitles = [
-    'Meeting Notes',
-    'Shopping List',
-    'Project Ideas',
-    'Daily Reminder',
-    'Important Task',
-    'Quick Note',
-    'Meeting Summary',
-    'Ideas Collection',
-    'Todo Items',
-    'Random Thoughts',
-  ];
-
-  final List<String> _sampleContents = [
-    'This is a sample note content for testing performance.',
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    'Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-    'Ut enim ad minim veniam, quis nostrud exercitation.',
-    'Duis aute irure dolor in reprehenderit in voluptate.',
-  ];
-
-  final List<String> _sampleTagNames = [
-    'Work', 'Personal', 'Important', 'Urgent', 'Ideas',
-    'Shopping', 'Projects', 'Meeting', 'Todo', 'Notes',
-    'Home', 'Family', 'Health', 'Finance', 'Travel',
-    'Study', 'Reading', 'Cooking', 'Sports', 'Music',
-  ];
-
-  Future<void> _createTestData() async {
-    if (_isRunning || _targetUid == null) return;
-
+  Future<void> _runCheck() async {
+    if (_running) return;
     setState(() {
-      _isRunning = true;
-      _status = 'Starting...';
-      _notesCreated = 0;
-      _tagsCreated = 0;
-      _error = '';
+      _running = true;
+      _error = null;
     });
 
     try {
-      final now = DateTime.now();
-      final db = FirebaseFirestore.instance;
+      final db = await DatabaseHelper.database();
 
-      // Create tags first
+      final loadWatch = Stopwatch()..start();
+      final notes = await NoteDatabase.getNotes(db);
+      loadWatch.stop();
+
+      // Đo thao tác tìm kiếm thực tế trên danh sách đã tải; không ghi dữ liệu.
+      final searchWatch = Stopwatch()..start();
+      final matches = notes
+          .where(
+            (note) => matchesNoteSearch(
+              query: 'a',
+              title: note.title,
+              content: note.content,
+            ),
+          )
+          .length;
+      searchWatch.stop();
+
+      // Đọc lại để phát hiện độ chậm khi mở danh sách sau lần đầu.
+      final reloadWatch = Stopwatch()..start();
+      await NoteDatabase.getNotes(db);
+      reloadWatch.stop();
+
+      if (!mounted) return;
       setState(() {
-        _status = 'Creating $_tagCount tags...';
+        _result = _PerformanceResult(
+          noteCount: notes.length,
+          matchCount: matches,
+          loadMs: loadWatch.elapsedMilliseconds,
+          searchMs: searchWatch.elapsedMilliseconds,
+          reloadMs: reloadWatch.elapsedMilliseconds,
+          checkedAt: DateTime.now(),
+        );
       });
-
-      final List<String> tagRemoteIds = [];
-      var tagsBatch = db.batch();
-      int batchCount = 0;
-      const batchSize = 500; // Firestore batch limit is 500
-
-      for (int i = 0; i < _tagCount; i++) {
-        final tagName = i < _sampleTagNames.length
-            ? _sampleTagNames[i]
-            : 'Tag ${i + 1}';
-
-        final tagRef = db
-            .collection('users')
-            .doc(_targetUid)
-            .collection('tags')
-            .doc();
-
-        tagRemoteIds.add(tagRef.id);
-
-        tagsBatch.set(tagRef, {
-          'name': tagName,
-          'createdAt': now.subtract(Duration(hours: _random.nextInt(720))).toIso8601String(),
-          'localId': i + 1,
-        });
-
-        batchCount++;
-        if (batchCount >= batchSize) {
-          await tagsBatch.commit();
-          setState(() {
-            _tagsCreated += batchSize;
-            _status = 'Created $_tagsCreated/$_tagCount tags...';
-          });
-          tagsBatch = db.batch();
-          batchCount = 0;
-        }
-      }
-
-      if (batchCount > 0) {
-        await tagsBatch.commit();
-        setState(() {
-          _tagsCreated = _tagCount;
-          _status = 'Created $_tagsCreated/$_tagCount tags...';
-        });
-      }
-
-      // Create notes
-      setState(() {
-        _status = 'Creating $_noteCount notes...';
-      });
-
-      var notesBatch = db.batch();
-      batchCount = 0;
-
-      for (int i = 0; i < _noteCount; i++) {
-        final title = '${_sampleTitles[_random.nextInt(_sampleTitles.length)]} ${i + 1}';
-        final content = _sampleContents[_random.nextInt(_sampleContents.length)];
-        final isChecklist = _random.nextBool();
-        final pinned = _random.nextDouble() < 0.1; // 10% pinned
-
-        // Assign 1-3 random tags to each note
-        final selectedTagCount = 1 + _random.nextInt(3);
-        final selectedTags = <String>[];
-        for (int j = 0; j < selectedTagCount && j < tagRemoteIds.length; j++) {
-          selectedTags.add(tagRemoteIds[_random.nextInt(tagRemoteIds.length)]);
-        }
-
-        final noteRef = db
-            .collection('users')
-            .doc(_targetUid)
-            .collection('notes')
-            .doc();
-
-        notesBatch.set(noteRef, {
-          'title': title,
-          'content': isChecklist ? '[{"text":"Task 1","done":false},{"text":"Task 2","done":true}]' : content,
-          'createdAt': now.subtract(Duration(hours: _random.nextInt(720))).toIso8601String(),
-          'editedAt': now.subtract(Duration(hours: _random.nextInt(720))).toIso8601String(),
-          'pinned': pinned,
-          'localId': i + 1,
-          'isChecklist': isChecklist,
-          'tags': selectedTags,
-        });
-
-        batchCount++;
-        if (batchCount >= batchSize) {
-          await notesBatch.commit();
-          setState(() {
-            _notesCreated += batchSize;
-            _status = 'Created $_notesCreated/$_noteCount notes...';
-          });
-          notesBatch = db.batch();
-          batchCount = 0;
-        }
-      }
-
-      if (batchCount > 0) {
-        await notesBatch.commit();
-        setState(() {
-          _notesCreated = _noteCount;
-          _status = 'Created $_notesCreated/$_noteCount notes...';
-        });
-      }
-
-      setState(() {
-        _status = 'Completed!';
-        _isRunning = false;
-      });
-    } catch (e) {
-      setState(() {
-        _status = 'Error occurred';
-        _error = e.toString();
-        _isRunning = false;
-      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _running = false);
     }
+  }
+
+  String _formatDate(DateTime value) {
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${two(value.day)}/${two(value.month)}/${value.year} '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
+
+  String _rating(int milliseconds) {
+    if (milliseconds < 100) return 'Rất tốt';
+    if (milliseconds < 400) return 'Tốt';
+    if (milliseconds < 1000) return 'Cần theo dõi';
+    return 'Chậm';
+  }
+
+  Color _ratingColor(int milliseconds) {
+    if (milliseconds < 400) return Colors.green;
+    if (milliseconds < 1000) return Colors.orange;
+    return Colors.red;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final result = _result;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Performance Test'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Kiểm tra hiệu năng'),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Target UID:',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      _targetUid!,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    if (_targetUid != FirebaseAuth.instance.currentUser?.uid) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        '⚠️ Data will be created for this UID, not current user!',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.orange,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    Text(
-                      'Test Configuration:',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text('• Notes: $_noteCount'),
-                    Text('• Tags: $_tagCount'),
-                  ],
-                ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: theme.colorScheme.primaryContainer,
+            child: const ListTile(
+              leading: Icon(Icons.verified_user_outlined),
+              title: Text('An toàn cho dữ liệu của bạn'),
+              subtitle: Text(
+                'Kiểm tra chỉ đọc dữ liệu trên máy: không tạo, xóa hoặc gửi ghi chú lên máy chủ.',
               ),
             ),
-            const SizedBox(height: 24),
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: _isRunning ? null : _createTestData,
-                icon: _isRunning
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.play_arrow),
-                label: Text(_isRunning ? 'Running...' : 'Start Test'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-              ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _running ? null : _runCheck,
+            icon: _running
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.speed),
+            label: Text(_running ? 'Đang kiểm tra…' : 'Chạy kiểm tra'),
+          ),
+          const SizedBox(height: 20),
+          if (result == null && _error == null)
+            const _EmptyResult()
+          else if (result != null) ...[
+            Text('Kết quả', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Lần chạy: ${_formatDate(result.checkedAt)}',
+              style: theme.textTheme.bodySmall,
             ),
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Status:',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _status,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    if (_tagsCreated > 0 || _notesCreated > 0) ...[
-                      const SizedBox(height: 16),
-                      LinearProgressIndicator(
-                        value: (_tagsCreated + _notesCreated) / (_tagCount + _noteCount),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Tags: $_tagsCreated/$_tagCount'),
-                      Text('Notes: $_notesCreated/$_noteCount'),
-                    ],
-                  ],
-                ),
-              ),
+            const SizedBox(height: 12),
+            _MetricCard(
+              icon: Icons.notes_outlined,
+              title: 'Tải danh sách ghi chú',
+              value: '${result.loadMs} ms',
+              detail: '${result.noteCount} ghi chú đang hoạt động',
+              rating: _rating(result.loadMs),
+              ratingColor: _ratingColor(result.loadMs),
             ),
-            if (_error.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Card(
-                color: Colors.red.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Error:',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: Colors.red.shade700,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _error,
-                        style: TextStyle(color: Colors.red.shade700),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            if (!_isRunning && _status == 'Completed!') ...[
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    await _refreshData();
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Refresh Notes from Firestore'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
-            ],
+            _MetricCard(
+              icon: Icons.search,
+              title: 'Tìm kiếm trong ghi chú',
+              value: '${result.searchMs} ms',
+              detail:
+                  'Tìm thấy ${result.matchCount}/${result.noteCount} ghi chú',
+              rating: _rating(result.searchMs),
+              ratingColor: _ratingColor(result.searchMs),
+            ),
+            _MetricCard(
+              icon: Icons.refresh,
+              title: 'Tải lại danh sách',
+              value: '${result.reloadMs} ms',
+              detail: 'Đo tốc độ đọc lại cơ sở dữ liệu cục bộ',
+              rating: _rating(result.reloadMs),
+              ratingColor: _ratingColor(result.reloadMs),
+            ),
           ],
-        ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              color: theme.colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Không thể kiểm tra: $_error',
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
-
-  Future<void> _refreshData() async {
-    try {
-      final db = await DatabaseHelper.database();
-      
-      // Show loading
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Syncing from Firestore...')),
-        );
-      }
-
-      // Sync tags
-      var localTags = await TagDatabase.getTags(db);
-      await TagSyncService.syncAll(db, localTags);
-      localTags = await TagDatabase.getTags(db);
-      if (!mounted) return;
-      Provider.of<TagProvider>(context, listen: false).setTags(localTags);
-
-      // Sync notes
-      var localNotes = await NoteDatabase.getNotes(db);
-      await NoteSyncService.syncAll(db, localNotes);
-      localNotes = await NoteDatabase.getNotes(db);
-      if (!mounted) return;
-      Provider.of<NoteProvider>(context, listen: false).setNotes(localNotes);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Synced! Loaded ${localNotes.length} notes and ${localTags.length} tags.'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error syncing: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 }
 
+class _PerformanceResult {
+  const _PerformanceResult({
+    required this.noteCount,
+    required this.matchCount,
+    required this.loadMs,
+    required this.searchMs,
+    required this.reloadMs,
+    required this.checkedAt,
+  });
+
+  final int noteCount;
+  final int matchCount;
+  final int loadMs;
+  final int searchMs;
+  final int reloadMs;
+  final DateTime checkedAt;
+}
+
+class _EmptyResult extends StatelessWidget {
+  const _EmptyResult();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 56),
+    child: Column(
+      children: [
+        Icon(Icons.analytics_outlined, size: 54, color: Colors.grey),
+        SizedBox(height: 12),
+        Text('Chưa có kết quả kiểm tra'),
+        SizedBox(height: 4),
+        Text('Nhấn “Chạy kiểm tra” để đo tốc độ ứng dụng.'),
+      ],
+    ),
+  );
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.detail,
+    required this.rating,
+    required this.ratingColor,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+  final String detail;
+  final String rating;
+  final Color ratingColor;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(bottom: 12),
+    child: ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(detail),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(rating, style: TextStyle(color: ratingColor, fontSize: 12)),
+        ],
+      ),
+    ),
+  );
+}

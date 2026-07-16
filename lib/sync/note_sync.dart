@@ -68,6 +68,11 @@ class NoteSyncService {
         final color = data['color'] as int? ?? 0;
         final folderId = data['folderId'] as int?;
         final isFavorite = (data['isFavorite'] == true);
+        final noteType =
+            {'note', 'reminder', 'shopping'}.contains(data['noteType'])
+            ? data['noteType'] as String
+            : 'note';
+        final price = data['price'] as String?;
         final remoteTagsRaw = data['tags'];
         final mappedTagIds = await _mapRemoteTagsToLocal(
           db,
@@ -106,6 +111,8 @@ class NoteSyncService {
                   'color': color,
                   'folderId': folderId,
                   'isFavorite': isFavorite ? 1 : 0,
+                  'noteType': noteType,
+                  'price': price,
                 },
                 where: 'id = ?',
                 whereArgs: [dynamicLocalId],
@@ -127,7 +134,7 @@ class NoteSyncService {
                 } catch (_) {}
               }
               final insertedId = await db.rawInsert(
-                'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite, noteType, price) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                   title,
                   content,
@@ -139,6 +146,8 @@ class NoteSyncService {
                   color,
                   folderId,
                   isFavorite ? 1 : 0,
+                  noteType,
+                  price,
                 ],
               );
               await TagDatabase.setTagsForNote(db, insertedId, mappedTagIds);
@@ -153,7 +162,7 @@ class NoteSyncService {
               } catch (_) {}
             }
             final insertedId = await db.rawInsert(
-              'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite, noteType, price) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
               [
                 title,
                 content,
@@ -165,6 +174,8 @@ class NoteSyncService {
                 color,
                 folderId,
                 isFavorite ? 1 : 0,
+                noteType,
+                price,
               ],
             );
             await TagDatabase.setTagsForNote(db, insertedId, mappedTagIds);
@@ -204,6 +215,8 @@ class NoteSyncService {
               color: color,
               folderId: folderId,
               isFavorite: isFavorite,
+              noteType: noteType,
+              price: price,
               collaborators: existingLocal.collaborators,
               sharedExternally: existingLocal.sharedExternally,
             );
@@ -269,6 +282,8 @@ class NoteSyncService {
                 'color': remoteNote.color,
                 'folderId': remoteNote.folderId,
                 'isFavorite': remoteNote.isFavorite ? 1 : 0,
+                'noteType': remoteNote.noteType,
+                'price': remoteNote.price,
               },
               where: 'id = ?',
               whereArgs: [dynamicLocalId],
@@ -280,7 +295,7 @@ class NoteSyncService {
           }
 
           final noteId = await db.rawInsert(
-            'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'insert or ignore into notes (title, content, createdAt, editedAt, pinned, remoteId, isChecklist, color, folderId, isFavorite, noteType, price) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
               remoteNote.title,
               remoteNote.content,
@@ -292,6 +307,8 @@ class NoteSyncService {
               remoteNote.color,
               remoteNote.folderId,
               remoteNote.isFavorite ? 1 : 0,
+              remoteNote.noteType,
+              remoteNote.price,
             ],
           );
           print('[NoteSync] downloaded remote -> localId=$noteId');
@@ -332,31 +349,34 @@ class NoteSyncService {
   // syncAll...) không đồng thời tạo nhiều bản remote cho cùng một ghi chú.
   static final Set<int> _pushing = <int>{};
 
-  static Future<void> pushAdded(Database db, Note note) async {
-    if (_pushing.contains(note.id)) return;
+  static Future<bool> pushAdded(Database db, Note note) async {
+    if (_pushing.contains(note.id)) return false;
     _pushing.add(note.id);
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (!_isActiveSession(uid)) return;
+      if (!_isActiveSession(uid)) return false;
       // Kiểm tra lại DB phòng khi remoteId vừa được luồng khác gán.
       final fresh = await NoteDatabase.getNote(db, note.id);
-      if (!_isActiveSession(uid)) return;
+      if (!_isActiveSession(uid)) return false;
       if (fresh.remoteId != null) {
         note.remoteId = fresh.remoteId;
-        return;
+        return true;
       }
       final created = await NoteApiService.createNote(
         note,
         expectedUserId: uid,
       );
-      if (!_isActiveSession(uid)) return;
+      if (!_isActiveSession(uid)) return false;
       if (created != null && created.remoteId != null) {
         note.remoteId = created.remoteId;
         await NoteDatabase.updateNote(db, note);
         print('[NoteSync] pushAdded -> remoteId=${created.remoteId}');
+        return true;
       }
+      return false;
     } catch (e) {
       print('[NoteSync] pushAdded error: $e');
+      return false;
     } finally {
       _pushing.remove(note.id);
     }

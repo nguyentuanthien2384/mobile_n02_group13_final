@@ -212,6 +212,10 @@ router.post('/', rateLimit({ key: 'note-write', max: 120 }), async (req, res) =>
       color: b.color || 0,
       folderId: b.folderId || null,
       isFavorite: b.isFavorite || false,
+      noteType: ['note', 'reminder', 'shopping'].includes(b.noteType)
+        ? b.noteType
+        : 'note',
+      price: b.price || null,
       localId: b.localId || null,
       reminderAt: b.reminderAt || null,
       coverImage: b.coverImage || '',
@@ -267,7 +271,7 @@ router.put('/:id', rateLimit({ key: 'note-write', max: 240 }), async (req, res) 
 
     const updates = {};
     const allowed = ['title', 'content', 'pinned', 'isChecklist', 'tags', 'color',
-      'folderId', 'isFavorite', 'localId', 'reminderAt', 'coverImage',
+      'folderId', 'isFavorite', 'noteType', 'price', 'localId', 'reminderAt', 'coverImage',
       'collaborators', 'sharedExternally'];
     for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key];
     updates.editedAt = new Date().toISOString();

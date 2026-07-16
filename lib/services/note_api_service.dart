@@ -17,13 +17,14 @@ class NoteApiService {
         return list.map((item) => _parseNoteJson(item)).toList();
       }
       return [];
-    } catch (e) {
-      print('[NoteApiService] fetchNotes error: $e');
+    } catch (e, stack) {
+      print('[NoteApiService] fetchNotes error: $e\n$stack');
       return [];
     }
   }
 
   static Future<List<Note>> fetchSharedNotes() async {
+    print('[NoteApiService] fetchSharedNotes() called');
     try {
       final res = await ApiService.get('/notes/shared');
       if (res.statusCode == 200) {
@@ -36,8 +37,8 @@ class NoteApiService {
         }).toList();
       }
       return [];
-    } catch (e) {
-      print('[NoteApiService] fetchSharedNotes error: $e');
+    } catch (e, stack) {
+      print('[NoteApiService] fetchSharedNotes error: $e\n$stack');
       return [];
     }
   }
@@ -444,10 +445,20 @@ class NoteApiService {
     return const [];
   }
 
+  static bool _asBool(Object? value) =>
+      value == true || value == 1 || value == '1' || value == 'true';
+
+  static int? _asInt(Object? value) => switch (value) {
+    int value => value,
+    num value => value.toInt(),
+    String value => int.tryParse(value),
+    _ => null,
+  };
+
   static Note _parseNoteJson(Map<String, dynamic> json) {
     return Note(
       id:
-          json['localId'] as int? ??
+          _asInt(json['localId']) ??
           DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title: json['title'] as String?,
       content: json['content'] as String?,
@@ -457,24 +468,26 @@ class NoteApiService {
       editedAt: json['editedAt'] != null
           ? DateTime.tryParse(json['editedAt'] as String)
           : null,
-      pinned: json['pinned'] as bool? ?? false,
+      pinned: _asBool(json['pinned']),
       remoteId: json['id'] as String?,
-      isChecklist: json['isChecklist'] as bool? ?? false,
-      color: json['color'] as int? ?? 0,
-      folderId: json['folderId'] as int?,
-      isFavorite: json['isFavorite'] as bool? ?? false,
+      isChecklist: _asBool(json['isChecklist']),
+      color: _asInt(json['color']) ?? 0,
+      folderId: _asInt(json['folderId']),
+      isFavorite: _asBool(json['isFavorite']),
+      noteType: json['noteType'] as String? ?? 'note',
+      price: json['price'] as String?,
       collaborators: _decodeCollaborators(json['collaborators']),
       sharedExternally:
           json['sharedExternally'] == 1 || json['sharedExternally'] == true,
-      isPublished: json['isPublished'] as bool? ?? false,
-      likesCount: json['likesCount'] as int? ?? 0,
-      commentsCount: json['commentsCount'] as int? ?? 0,
-      archived: json['archived'] as bool? ?? false,
-      deleted: json['deleted'] as bool? ?? false,
+      isPublished: _asBool(json['isPublished']),
+      likesCount: _asInt(json['likesCount']) ?? 0,
+      commentsCount: _asInt(json['commentsCount']) ?? 0,
+      archived: _asBool(json['archived']),
+      deleted: _asBool(json['deleted']),
       ownerUid: json['ownerUid'] as String?,
       ownerName: json['ownerName'] as String?,
       sharePermission: json['sharePermission'] as String?,
-      sharedViaFolder: json['sharedViaFolder'] as bool? ?? false,
+      sharedViaFolder: _asBool(json['sharedViaFolder']),
       sharedFolderId: json['sharedFolderId'] as String?,
       sharedFolderName: json['sharedFolderName'] as String?,
       // Note: tagIds are handled locally and mapped in sync services

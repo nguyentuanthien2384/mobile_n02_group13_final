@@ -17,45 +17,105 @@ class TagManagementScreen extends StatefulWidget {
 
 class _TagManagementScreenState extends State<TagManagementScreen> {
   Database? _db;
+  bool _loaded = false;
+  String _query = '';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)?.settings.arguments as Map?;
     _db = args != null ? args['db'] as Database? : null;
+    if (!_loaded && _db != null) {
+      _loaded = true;
+      _loadTags();
+    }
+  }
+
+  Future<void> _loadTags() async {
+    final db = _db;
+    if (db == null) return;
+    final tags = await TagDatabase.getTags(db);
+    if (!mounted) return;
+    Provider.of<TagProvider>(context, listen: false).setTags(tags);
+  }
+
+  bool _hasDuplicateName(String name, {int? exceptId}) {
+    final normalized = name.trim().toLowerCase();
+    return Provider.of<TagProvider>(context, listen: false).tags.any(
+      (tag) =>
+          tag.id != exceptId && tag.name.trim().toLowerCase() == normalized,
+    );
+  }
+
+  void _showMessage(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? Colors.red : null,
+      ),
+    );
   }
 
   Future<void> _createTag() async {
     final db = _db;
     if (db == null) return;
+    final tagProvider = Provider.of<TagProvider>(context, listen: false);
     final controller = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Create tag'),
+        title: const Text('Tạo nhãn'),
         content: TextField(
           controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(hintText: 'Tag name'),
+          decoration: const InputDecoration(
+            hintText: 'Tên nhãn, ví dụ: Học tập',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Tạo'),
+          ),
         ],
       ),
     );
     if (confirmed != true) return;
     final name = controller.text.trim();
     if (name.isEmpty) return;
-    final createdAt = DateTime.now();
-    final tagId = await TagDatabase.insertTag(db, Tag(id: 0, name: name, createdAt: createdAt));
-    final tag = Tag(id: tagId, name: name, createdAt: createdAt);
-    Provider.of<TagProvider>(context, listen: false).addTag(tag);
-    final remoteId = await TagSyncService.pushAdded(db, tag);
-    if (remoteId != null && mounted) {
-      Provider.of<TagProvider>(context, listen: false).setTagRemoteId(tag.id, remoteId);
+    if (_hasDuplicateName(name)) {
+      _showMessage('Nhãn này đã tồn tại.', error: true);
+      return;
     }
+    final createdAt = DateTime.now();
+    final tagId = await TagDatabase.insertTag(
+      db,
+      Tag(id: 0, name: name, createdAt: createdAt),
+    );
+    final tag = Tag(id: tagId, name: name, createdAt: createdAt);
+    tagProvider.addTag(tag);
+    try {
+      final remoteId = await TagSyncService.pushAdded(db, tag);
+      if (remoteId != null && mounted) {
+        tagProvider.setTagRemoteId(tag.id, remoteId);
+      }
+    } catch (_) {
+      // Nhãn vẫn được lưu trên máy và sẽ được đồng bộ lại sau.
+    }
+    _showMessage('Đã tạo nhãn “$name”.');
   }
 
   Future<void> _renameTag(Tag tag) async {
@@ -65,27 +125,42 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rename tag'),
+        title: const Text('Đổi tên nhãn'),
         content: TextField(
           controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(hintText: 'Tag name'),
+          decoration: const InputDecoration(hintText: 'Tên nhãn'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lưu'),
+          ),
         ],
       ),
     );
     if (confirmed != true) return;
     final newName = controller.text.trim();
     if (newName.isEmpty || newName == tag.name) return;
+    if (_hasDuplicateName(newName, exceptId: tag.id)) {
+      _showMessage('Nhãn này đã tồn tại.', error: true);
+      return;
+    }
     final updated = tag.copyWith(name: newName);
     await TagDatabase.updateTag(db, updated);
     if (!mounted) return;
     Provider.of<TagProvider>(context, listen: false).updateTag(updated);
-    await TagSyncService.pushUpdated(updated);
+    try {
+      await TagSyncService.pushUpdated(updated);
+    } catch (_) {
+      // Cập nhật cục bộ vẫn hợp lệ khi đang ngoại tuyến.
+    }
+    _showMessage('Đã đổi tên nhãn.');
   }
 
   Future<void> _deleteTag(Tag tag) async {
@@ -94,11 +169,19 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete tag'),
-        content: const Text('This will detach the tag from notes but keep the notes themselves.'),
+        title: const Text('Xóa nhãn?'),
+        content: Text(
+          'Nhãn “${tag.name}” sẽ được gỡ khỏi các ghi chú. Các ghi chú không bị xóa.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Xóa'),
+          ),
         ],
       ),
     );
@@ -113,9 +196,14 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
     tagProvider.removeTag(tag.id);
     for (final noteId in affectedNoteIds) {
       noteProvider.removeTagFromNote(noteId, tag.id);
-      await NoteSyncService.pushNoteTags(db, noteId);
+      try {
+        await NoteSyncService.pushNoteTags(db, noteId);
+      } catch (_) {}
     }
-    await TagSyncService.pushDeleted(tag);
+    try {
+      await TagSyncService.pushDeleted(tag);
+    } catch (_) {}
+    _showMessage('Đã xóa nhãn “${tag.name}”.');
   }
 
   @override
@@ -127,7 +215,10 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
       appBar: AppBar(
         backgroundColor: theme.colorScheme.primary,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Manage tags', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Quản lý nhãn',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       floatingActionButton: db == null
           ? null
@@ -137,39 +228,78 @@ class _TagManagementScreenState extends State<TagManagementScreen> {
             ),
       body: Consumer<TagProvider>(
         builder: (context, tagProvider, _) {
-          final tags = tagProvider.tags;
-          if (tags.isEmpty) {
-            return Center(
-              child: Text(
-                db == null ? 'Database unavailable' : 'No tags yet. Tap + to create one.',
-                style: theme.textTheme.bodyMedium,
-              ),
-            );
-          }
+          final tags =
+              tagProvider.tags
+                  .where((tag) => tag.name.toLowerCase().contains(_query))
+                  .toList()
+                ..sort((a, b) => a.name.compareTo(b.name));
           return ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            itemCount: tags.length,
+            // Giữ ô tìm kiếm trên màn hình kể cả khi chưa có kết quả, để
+            // người dùng có thể tiếp tục nhập hoặc xóa từ khóa.
+            itemCount: tags.isEmpty ? 2 : tags.length + 1,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final tag = tags[index];
+              if (index == 0) {
+                return TextField(
+                  controller: _searchController,
+                  onChanged: (value) =>
+                      setState(() => _query = value.trim().toLowerCase()),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Tìm nhãn',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Xóa từ khóa',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                  ),
+                );
+              }
+              if (tags.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: Text(
+                    db == null
+                        ? 'Không thể mở cơ sở dữ liệu.'
+                        : _query.isEmpty
+                        ? 'Chưa có nhãn nào. Nhấn + để tạo nhãn đầu tiên.'
+                        : 'Không tìm thấy nhãn phù hợp.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                );
+              }
+              final tag = tags[index - 1];
               final noteCount = tag.noteIds.length;
               return Material(
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(14),
                 child: ListTile(
-                  title: Text(tag.name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  subtitle: Text('$noteCount note${noteCount == 1 ? '' : 's'}'),
+                  title: Text(
+                    tag.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text('$noteCount ghi chú'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
                         icon: const Icon(Icons.edit),
-                        tooltip: 'Rename',
+                        tooltip: 'Đổi tên',
                         onPressed: () => _renameTag(tag),
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete),
-                        tooltip: 'Delete',
+                        tooltip: 'Xóa',
                         onPressed: () => _deleteTag(tag),
                       ),
                     ],

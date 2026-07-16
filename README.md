@@ -178,11 +178,28 @@ flutter pub get
 - Đảm bảo file `android/app/google-services.json` đã có (project `mobile-final-3`)
 - File `lib/firebase_options.dart` đã được cấu hình sẵn
 
+#### Hướng dẫn lấy Base64 Service Account cho Backend:
+1. Truy cập **Firebase Console** -> Cài đặt dự án (Project Settings) -> Tài khoản dịch vụ (Service Accounts).
+2. Nhấp vào **Tạo khóa riêng mới (Generate new private key)** để tải file JSON chứa thông tin tài khoản dịch vụ.
+3. Mã hóa nội dung file JSON đó sang chuỗi Base64:
+   - Trên Windows (PowerShell):
+     ```powershell
+     [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("duong/dan/den/file-key.json"))
+     ```
+   - Trên Linux/macOS:
+     ```bash
+     base64 -i file-key.json
+     ```
+4. Copy chuỗi kết quả thu được dán vào giá trị `FIREBASE_SERVICE_ACCOUNT` trong file `.env`.
+
 ### 4. Chạy ứng dụng Flutter
 
 ```bash
-# Chạy debug
-flutter run
+# Kiểm tra các thiết bị đang kết nối (Emulator, thiết bị thật, Chrome...)
+flutter devices
+
+# Chạy debug trên thiết bị cụ thể
+flutter run -d <ID_thiet_bi>
 
 # Clean build nếu có lỗi
 flutter clean && flutter pub get && flutter run
@@ -198,6 +215,10 @@ npm install
 cp .env.example .env
 # Điền các biến môi trường vào .env
 
+# Chạy chế độ phát triển (watch mode tự động reload khi sửa code)
+npm run dev
+
+# Hoặc khởi chạy thông thường
 npm start
 ```
 
@@ -209,6 +230,18 @@ FIREBASE_PROJECT_ID=mobile-final-3
 FIREBASE_SERVICE_ACCOUNT=<base64 service account JSON>
 CORS_ORIGIN=*
 ```
+
+### 6. Cấu hình kết nối giữa App và Backend
+
+Để ứng dụng di động giao tiếp được với Backend cục bộ (localhost), bạn cần cấu hình lại URL máy chủ trong ứng dụng:
+
+1. **Khởi chạy Backend** trên máy tính của bạn (mặc định chạy tại cổng `3000`).
+2. Mở ứng dụng trên thiết bị/trình giả lập, truy cập màn hình **Cài đặt (Settings)** từ menu.
+3. Ở mục **Máy chủ & Kết nối**, nhập địa chỉ API tương ứng:
+   - Nếu dùng **Android Emulator**: Nhập `http://10.0.2.2:3000/api` (Địa chỉ IP loopback của máy chủ chạy máy ảo).
+   - Nếu dùng **iOS Simulator** hoặc chạy **Web**: Nhập `http://localhost:3000/api`.
+   - Nếu dùng **thiết bị thật (Physical Device)**: Nhập địa chỉ IP mạng nội bộ của máy tính của bạn (Ví dụ: `http://192.168.1.5:3000/api`). Đảm bảo điện thoại và máy tính kết nối chung mạng Wi-Fi.
+4. Nhấn **Lưu máy chủ** và khởi động lại ứng dụng để áp dụng.
 
 ---
 

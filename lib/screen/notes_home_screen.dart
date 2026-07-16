@@ -80,6 +80,19 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
     if (!mounted || !DatabaseHelper.isCurrentUser(sessionUid)) return;
     _sessionUid = sessionUid;
     _db = db;
+    // Bản dữ liệu mẫu cũ chưa có noteType nên từng bị dồn vào My Notes.
+    // Khôi phục đúng Reminder/Shopping ngay khi mở ứng dụng.
+    final restored = await SampleData.restoreLegacySampleNoteTypes(db);
+    if (sessionUid != null) {
+      for (final note in restored) {
+        try {
+          await NoteSyncService.pushUpdated(note);
+        } catch (_) {
+          // Ghi chú vẫn được sửa cục bộ và sẽ đồng bộ lại khi có mạng.
+        }
+      }
+    }
+    if (!mounted || !DatabaseHelper.isCurrentUser(sessionUid)) return;
     await _load();
   }
 
@@ -163,6 +176,7 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
                 'id': note.id,
                 'remoteId': note.remoteId,
                 'tags': note.tagIds,
+                'noteType': note.noteType,
               },
             )
             as Map?;
@@ -195,7 +209,11 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
         await Navigator.pushNamed(
               context,
               route,
-              arguments: {'title': '', 'content': ''},
+              arguments: {
+                'title': '',
+                'content': '',
+                'noteType': _modes[_mode].type,
+              },
             )
             as Map?;
     if (result == null) return;
@@ -209,11 +227,11 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
     if (title.trim().isEmpty && plainTextFromContent(content).isEmpty) return;
     final now = DateTime.now().toIso8601String();
     final id = await NoteDatabase.rawInsertNote(db, [title, content, now, now]);
-    var newNote = await NoteDatabase.getNote(db, id);
-    if (isChecklist) {
-      newNote = newNote.copyWith(isChecklist: true);
-      await NoteDatabase.updateNote(db, newNote);
-    }
+    var newNote = (await NoteDatabase.getNote(
+      db,
+      id,
+    )).copyWith(isChecklist: isChecklist, noteType: _modes[_mode].type);
+    await NoteDatabase.updateNote(db, newNote);
     try {
       await NoteSyncService.pushAdded(db, newNote);
     } catch (_) {}
@@ -362,6 +380,11 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
               onTap: () => Navigator.pop(ctx, 'share'),
             ),
             ListTile(
+              leading: const Icon(Icons.category_outlined),
+              title: const Text('Chuyển loại ghi chú'),
+              onTap: () => Navigator.pop(ctx, 'type'),
+            ),
+            ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text(
                 'Xóa ghi chú',
@@ -388,10 +411,67 @@ class _NotesHomeScreenState extends State<NotesHomeScreen> {
         );
         await _load();
         break;
+      case 'type':
+        await _changeNoteType(note);
+        break;
       case 'delete':
         await _confirmDelete(note);
         break;
     }
+  }
+
+  /// Cho phép sửa từng ghi chú khi người dùng muốn phân loại khác bộ mẫu.
+  Future<void> _changeNoteType(Note note) async {
+    final db = _db;
+    if (db == null) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final mode in _modes)
+              ListTile(
+                leading: Icon(
+                  mode.type == 'reminder'
+                      ? Icons.notifications_none
+                      : mode.type == 'shopping'
+                      ? Icons.shopping_cart_outlined
+                      : Icons.sticky_note_2_outlined,
+                ),
+                title: Text(
+                  mode.type == 'note'
+                      ? 'My Notes'
+                      : mode.type == 'reminder'
+                      ? 'Reminder'
+                      : 'Shopping list',
+                ),
+                trailing: note.noteType == mode.type
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () => Navigator.pop(ctx, mode.type),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == note.noteType) return;
+    final updated = note.copyWith(noteType: selected, editedAt: DateTime.now());
+    await NoteDatabase.updateNote(db, updated);
+    try {
+      await NoteSyncService.pushUpdated(updated);
+    } catch (_) {
+      // Lưu cục bộ thành công; đồng bộ sẽ thử lại khi có kết nối.
+    }
+    if (!mounted) return;
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Đã chuyển loại ghi chú')));
   }
 
   /// Chọn thư mục và gán ghi chú vào thư mục đó.

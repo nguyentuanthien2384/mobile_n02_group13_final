@@ -25,6 +25,7 @@ import 'screen/statistics_screen.dart';
 import 'screen/trash_screen.dart';
 import 'screen/archived_notes_screen.dart';
 import 'services/notification_service.dart';
+import 'services/api_service.dart';
 import 'screen/main_shell.dart';
 import 'screen/onboarding_screen.dart';
 import 'screen/settings_screen.dart';
@@ -50,6 +51,7 @@ Future<void> main() async {
     }
   }
   await NotificationService.instance.init();
+  await ApiService.loadConfiguration();
   final themeProvider = ThemeProvider();
   await themeProvider.load();
   final database = await DatabaseHelper.database();

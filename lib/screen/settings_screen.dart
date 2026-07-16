@@ -42,8 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('api_base_url', _apiUrlController.text.trim());
+    await ApiService.setBaseUrl(_apiUrlController.text.trim());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -53,6 +52,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _testServer() async {
+    await ApiService.setBaseUrl(_apiUrlController.text.trim());
+    final reachable = await ApiService.isServerReachable();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          reachable
+              ? 'Đã kết nối được máy chủ. Bạn có thể đồng bộ và chia sẻ.'
+              : 'Không kết nối được máy chủ. Kiểm tra URL API hoặc mạng.',
+        ),
+      ),
+    );
   }
 
   Future<void> _exportBackup() async {
@@ -242,6 +256,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       onPressed: _saveSettings,
                       child: const Text('Lưu máy chủ'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _testServer,
+                      icon: const Icon(Icons.wifi_tethering_outlined),
+                      label: const Text('Kiểm tra kết nối máy chủ'),
                     ),
                   ),
                 ],

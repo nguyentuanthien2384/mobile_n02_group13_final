@@ -75,8 +75,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
         ],
       ),
     );
-    pin.dispose();
-    again.dispose();
+    // The dialog is still completing its exit animation when showDialog
+    // resolves. Disposing the controllers immediately can leave an attached
+    // EditableText and trigger `dependencies.isEmpty` in Flutter.
+    Future<void>.delayed(const Duration(milliseconds: 500), () {
+      pin.dispose();
+      again.dispose();
+    });
     return result;
   }
 

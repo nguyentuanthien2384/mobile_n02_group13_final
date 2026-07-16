@@ -2,11 +2,47 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // BASE URL cho API. Đổi thành URL Render.com của bạn sau khi deploy.
   // Trên Emulator Android, 10.0.2.2 là localhost của máy tính.
-  static const String baseUrl = 'http://10.0.2.2:3000/api';
+  static const String defaultBaseUrl = 'http://10.0.2.2:3000/api';
+  static String _baseUrl = defaultBaseUrl;
+
+  static String get baseUrl => _baseUrl;
+
+  /// Loads the server selected in Settings before any sync/share request.
+  static Future<void> loadConfiguration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('api_base_url')?.trim();
+    if (saved != null && saved.isNotEmpty) {
+      _baseUrl = _normaliseBaseUrl(saved);
+    }
+  }
+
+  static Future<void> setBaseUrl(String value) async {
+    _baseUrl = _normaliseBaseUrl(value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('api_base_url', _baseUrl);
+  }
+
+  static String _normaliseBaseUrl(String value) {
+    final trimmed = value.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (trimmed.isEmpty) return defaultBaseUrl;
+    return trimmed.endsWith('/api') ? trimmed : '$trimmed/api';
+  }
+
+  static Future<bool> isServerReachable() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/health'))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
   static Future<Map<String, String>> _getHeaders({
     String? expectedUserId,
@@ -34,7 +70,7 @@ class ApiService {
     String? expectedUserId,
   }) async {
     final headers = await _getHeaders(expectedUserId: expectedUserId);
-    return await http.get(Uri.parse('$baseUrl$endpoint'), headers: headers);
+    return await http.get(Uri.parse('$_baseUrl$endpoint'), headers: headers);
   }
 
   static Future<http.Response> post(
@@ -44,7 +80,7 @@ class ApiService {
   }) async {
     final headers = await _getHeaders(expectedUserId: expectedUserId);
     return await http.post(
-      Uri.parse('$baseUrl$endpoint'),
+      Uri.parse('$_baseUrl$endpoint'),
       headers: headers,
       body: jsonEncode(body),
     );
@@ -57,7 +93,7 @@ class ApiService {
   }) async {
     final headers = await _getHeaders(expectedUserId: expectedUserId);
     return await http.put(
-      Uri.parse('$baseUrl$endpoint'),
+      Uri.parse('$_baseUrl$endpoint'),
       headers: headers,
       body: jsonEncode(body),
     );
@@ -68,7 +104,7 @@ class ApiService {
     String? expectedUserId,
   }) async {
     final headers = await _getHeaders(expectedUserId: expectedUserId);
-    return await http.delete(Uri.parse('$baseUrl$endpoint'), headers: headers);
+    return await http.delete(Uri.parse('$_baseUrl$endpoint'), headers: headers);
   }
 
   // Upload file image
@@ -80,7 +116,7 @@ class ApiService {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/upload/image'),
+        Uri.parse('$_baseUrl/upload/image'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.files.add(await http.MultipartFile.fromPath('image', file.path));
@@ -110,7 +146,7 @@ class ApiService {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/upload/avatar'),
+        Uri.parse('$_baseUrl/upload/avatar'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.files.add(await http.MultipartFile.fromPath('avatar', file.path));

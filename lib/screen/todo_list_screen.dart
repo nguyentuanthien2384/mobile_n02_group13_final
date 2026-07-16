@@ -29,6 +29,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
   int? _noteId;
   String? _remoteId;
   int? _folderId;
+  String _noteType = 'note';
   bool _dirty = false;
   bool _saving = false;
   bool _suppress = false;
@@ -41,17 +42,27 @@ class _TodoListScreenState extends State<TodoListScreen> {
     _debounce?.cancel();
     _docSub?.cancel();
     _title.dispose();
-    for (final c in _items) { c.dispose(); }
-    for (final f in _itemNodes) { f.dispose(); }
+    for (final c in _items) {
+      c.dispose();
+    }
+    for (final f in _itemNodes) {
+      f.dispose();
+    }
     super.dispose();
   }
 
   void _ensureSub() {
     if (_remoteId == null || _docSub != null) return;
-    final user = FirebaseAuth.instance.currentUser; if (user == null) return;
-    final doc = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('notes').doc(_remoteId);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final doc = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('notes')
+        .doc(_remoteId);
     _docSub = doc.snapshots(includeMetadataChanges: true).listen((snap) {
-      final data = snap.data(); if (data == null) return;
+      final data = snap.data();
+      if (data == null) return;
       if (snap.metadata.hasPendingWrites) return;
       if (_dirty) return; // don't override while typing
       _applyFromJson((data['content'] as String?) ?? '');
@@ -106,8 +117,11 @@ class _TodoListScreenState extends State<TodoListScreen> {
     try {
       final parsed = (jsonStr.isEmpty) ? [] : (jsonDecode(jsonStr) as List);
       _suppress = true;
-      for (final c in _items) { c.dispose(); }
-      _items.clear(); _checked.clear();
+      for (final c in _items) {
+        c.dispose();
+      }
+      _items.clear();
+      _checked.clear();
       for (final e in parsed) {
         final text = (e['text'] as String?) ?? '';
         final done = (e['done'] as bool?) ?? false;
@@ -138,11 +152,20 @@ class _TodoListScreenState extends State<TodoListScreen> {
     if (_noteId == null || _remoteId == null) return;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () async {
-      await NoteSyncService.pushUpdated(Note(
-        id: _noteId!, title: _title.text, content: _toJson(),
-        createdAt: DateTime.now(), editedAt: DateTime.now(), pinned: false, remoteId: _remoteId, isChecklist: true,
-        tagIds: _tagIds,
-      ));
+      await NoteSyncService.pushUpdated(
+        Note(
+          id: _noteId!,
+          title: _title.text,
+          content: _toJson(),
+          createdAt: DateTime.now(),
+          editedAt: DateTime.now(),
+          pinned: false,
+          remoteId: _remoteId,
+          isChecklist: true,
+          tagIds: _tagIds,
+          noteType: _noteType,
+        ),
+      );
     });
   }
 
@@ -155,7 +178,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
       final title = _title.text;
       final content = _toJson();
       final hasContent =
-          title.trim().isNotEmpty || _items.any((c) => c.text.trim().isNotEmpty);
+          title.trim().isNotEmpty ||
+          _items.any((c) => c.text.trim().isNotEmpty);
       final db = await DatabaseHelper.database();
       Note note;
       if (_noteId == null) {
@@ -178,6 +202,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
           isChecklist: true,
           folderId: _folderId,
           tagIds: _tagIds,
+          noteType: _noteType,
         );
         final id = await NoteDatabase.insertNote(db, base);
         _noteId = id;
@@ -207,9 +232,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
       if (mounted) {
         setState(() {});
         if (showToast) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã lưu ghi chú')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Đã lưu ghi chú')));
         }
       }
       return note;
@@ -229,6 +254,10 @@ class _TodoListScreenState extends State<TodoListScreen> {
       _remoteId = args['remoteId'] as String?;
       _folderId = args['folderId'] as int?;
       _tagIds = List<int>.from((args['tags'] as List?) ?? const []);
+      final requestedType = args['noteType'] as String?;
+      _noteType = {'note', 'reminder', 'shopping'}.contains(requestedType)
+          ? requestedType!
+          : 'note';
       _initialized = true;
     }
     _ensureSub();
@@ -263,7 +292,9 @@ class _TodoListScreenState extends State<TodoListScreen> {
                 if (note == null) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Hãy nhập nội dung trước khi chia sẻ')),
+                      const SnackBar(
+                        content: Text('Hãy nhập nội dung trước khi chia sẻ'),
+                      ),
                     );
                   }
                   return;
@@ -271,7 +302,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
                 if (!mounted) return;
                 showDialog(
                   context: context,
-                  builder: (_) => ShareDialog(noteRemoteId: note.remoteId, note: note),
+                  builder: (_) =>
+                      ShareDialog(noteRemoteId: note.remoteId, note: note),
                 );
               },
             ),
@@ -284,9 +316,12 @@ class _TodoListScreenState extends State<TodoListScreen> {
                     context: context,
                     isScrollControlled: true,
                     shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
                     ),
-                    builder: (context) => CommentsSheet(noteRemoteId: _remoteId!),
+                    builder: (context) =>
+                        CommentsSheet(noteRemoteId: _remoteId!),
                   );
                 },
               ),
@@ -302,11 +337,21 @@ class _TodoListScreenState extends State<TodoListScreen> {
                 autocorrect: false,
                 enableSuggestions: false,
                 keyboardType: TextInputType.visiblePassword,
-                decoration: const InputDecoration(border: InputBorder.none, hintText: 'Title'),
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, fontSize: 20),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: 'Title',
+                ),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
                 autofocus: _title.text.isEmpty,
                 textInputAction: TextInputAction.next,
-                onChanged: (_) { if (_suppress) return; _dirty = true; _schedulePush(); },
+                onChanged: (_) {
+                  if (_suppress) return;
+                  _dirty = true;
+                  _schedulePush();
+                },
                 onSubmitted: (_) {
                   _ensureFirstItemAndFocus();
                 },
@@ -324,10 +369,16 @@ class _TodoListScreenState extends State<TodoListScreen> {
                           onTap: _addItem,
                           borderRadius: BorderRadius.circular(8),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 6,
+                            ),
                             child: Row(
                               children: [
-                                Icon(Icons.add, color: theme.colorScheme.primary),
+                                Icon(
+                                  Icons.add,
+                                  color: theme.colorScheme.primary,
+                                ),
                                 const SizedBox(width: 10),
                                 Text(
                                   'Thêm mục',
@@ -349,7 +400,10 @@ class _TodoListScreenState extends State<TodoListScreen> {
                         Checkbox(
                           value: _checked[index],
                           onChanged: (v) {
-                            _checked[index] = v ?? false; _dirty = true; _schedulePush(); setState(() {});
+                            _checked[index] = v ?? false;
+                            _dirty = true;
+                            _schedulePush();
+                            setState(() {});
                           },
                         ),
                         Expanded(
@@ -357,25 +411,34 @@ class _TodoListScreenState extends State<TodoListScreen> {
                             focusNode: _itemNodes[index],
                             onKeyEvent: (node, event) {
                               if (event is KeyDownEvent) {
-                                if (event.logicalKey == LogicalKeyboardKey.enter) {
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.enter) {
                                   // handled by onSubmitted; keep for desktop
                                   return KeyEventResult.ignored;
                                 }
-                                if (event.logicalKey == LogicalKeyboardKey.backspace) {
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.backspace) {
                                   final empty = _items[index].text.isEmpty;
                                   if (empty) {
                                     if (_backspaceArmed[index]) {
                                       if (_items.length > 1) {
-                                        final prev = (index > 0) ? index - 1 : 0;
-                                        _items.removeAt(index); _checked.removeAt(index);
+                                        final prev = (index > 0)
+                                            ? index - 1
+                                            : 0;
+                                        _items.removeAt(index);
+                                        _checked.removeAt(index);
                                         _itemNodes.removeAt(index).dispose();
                                         _backspaceArmed.removeAt(index);
                                         setState(() {});
-                                        Future.delayed(const Duration(milliseconds: 10), () {
-                                          _itemNodes[prev].requestFocus();
-                                        });
+                                        Future.delayed(
+                                          const Duration(milliseconds: 10),
+                                          () {
+                                            _itemNodes[prev].requestFocus();
+                                          },
+                                        );
                                       }
-                                      _dirty = true; _schedulePush();
+                                      _dirty = true;
+                                      _schedulePush();
                                     } else {
                                       _backspaceArmed[index] = true;
                                     }
@@ -389,24 +452,41 @@ class _TodoListScreenState extends State<TodoListScreen> {
                             },
                             child: TextField(
                               controller: _items[index],
-                              inputFormatters: const [VietnameseTelexFormatter()],
+                              inputFormatters: const [
+                                VietnameseTelexFormatter(),
+                              ],
                               autocorrect: false,
                               enableSuggestions: false,
                               keyboardType: TextInputType.visiblePassword,
-                              decoration: const InputDecoration(border: InputBorder.none, hintText: 'List item'),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                hintText: 'List item',
+                              ),
                               maxLines: 1,
                               textInputAction: TextInputAction.next,
-                              onChanged: (_) { if (_suppress) return; _dirty = true; _schedulePush(); _backspaceArmed[index] = false; },
+                              onChanged: (_) {
+                                if (_suppress) return;
+                                _dirty = true;
+                                _schedulePush();
+                                _backspaceArmed[index] = false;
+                              },
                               onSubmitted: (_) {
-                                _items.insert(index + 1, TextEditingController());
+                                _items.insert(
+                                  index + 1,
+                                  TextEditingController(),
+                                );
                                 _checked.insert(index + 1, false);
                                 _itemNodes.insert(index + 1, FocusNode());
                                 _backspaceArmed.insert(index + 1, false);
-                                _dirty = true; _schedulePush();
+                                _dirty = true;
+                                _schedulePush();
                                 setState(() {});
-                                Future.delayed(const Duration(milliseconds: 10), () {
-                                  _itemNodes[index + 1].requestFocus();
-                                });
+                                Future.delayed(
+                                  const Duration(milliseconds: 10),
+                                  () {
+                                    _itemNodes[index + 1].requestFocus();
+                                  },
+                                );
                               },
                             ),
                           ),
@@ -428,5 +508,3 @@ class _TodoListScreenState extends State<TodoListScreen> {
     );
   }
 }
-
-

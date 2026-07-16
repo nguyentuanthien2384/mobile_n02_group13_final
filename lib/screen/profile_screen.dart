@@ -307,6 +307,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: const Icon(Icons.edit_outlined),
             onPressed: _editProfile,
           ),
+          IconButton(
+            tooltip: 'Đăng xuất',
+            icon: const Icon(Icons.logout),
+            onPressed: _confirmAndSignOut,
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -429,7 +434,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       arguments: {'db': db},
                     );
                   },
-                  child: const Text('Manage tags'),
+                  child: const Text('Quản lý nhãn'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -442,7 +447,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.orange,
                   ),
-                  child: const Text('Performance Test'),
+                  child: const Text('Kiểm tra hiệu năng'),
                 ),
               ),
               const SizedBox(height: 12),
